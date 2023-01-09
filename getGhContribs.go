@@ -16,6 +16,27 @@ import (
 	"golang.org/x/oauth2"
 )
 
+/*
+ * define a struct that can be used to put together a list of all of the
+ * repositories in a given organization (by name) that match a given query
+ */
+var RepositorySearchQuery struct {
+	Search struct {
+		RepositoryCount int
+		Edges           []struct {
+			Cursor githubv4.String
+			Node   struct {
+				Repository struct {
+					Name       string
+					IsArchived bool
+					IsPrivate  bool
+					Url        string
+				} `graphql:"... on Repository"`
+			}
+		}
+	} `graphql:"search(query: $query, type: $type, first: $first)"`
+}
+
 // define the struct that we'll use to determine the organization ID values
 // that correspond to the input organization names
 var OrgIdQuery struct {
@@ -219,6 +240,19 @@ func getOrgIdList(client *githubv4.Client) []githubv4.ID {
 }
 
 /*
+ * determine if a given user is part of  the list of users that make up
+ * the input team
+ */
+func findUserInTeam(teamList []map[string]string, user string) (bool, string) {
+	for _, member := range teamList {
+		if member["user"] == user {
+			return true, member["gitHubId"]
+		}
+	}
+	return false, ""
+}
+
+/*
  * define a function that can be used to get the list of users to query for;
  * this function uses either a list of user names or a list of GitHub IDs that
  * were passed on on the command line (using either the '-u, --user-list' flag
@@ -256,20 +290,21 @@ func getUserIdList() []string {
 		// retrieve the details for the input team (or the default team if a team
 		// was not specified on the comamand line)
 		teamName, teamList = getTeamList()
+		_, defaultTeamList := getTeamList(viper.GetString("default_team"))
 		for _, user := range userList {
-			foundUser := false
-			for _, member := range teamList {
-				if member["user"] == user {
-					// get the corresponding GitHub ID for each user from the map defined in
-					// the config file
-					userIdList = append(userIdList, member["gitHubId"])
-					foundUser = true
-					break
+			foundUser, memberID := findUserInTeam(teamList, user)
+			// if a match was not found, check for a match in the default team
+			if !foundUser {
+				foundUser, memberID = findUserInTeam(defaultTeamList, user)
+				// if a match was still not found in the default team, print a warning and continue
+				if !foundUser {
+					fmt.Fprintf(os.Stderr, "WARNING: user '%s' not found on the team '%s'; skipping\n", user, teamName)
 				}
 			}
-			// if a match was not found, print a warning that we're skipping this user
-			if !foundUser {
-				fmt.Fprintf(os.Stderr, "WARNING: user '%s' not found on the team '%s'; skipping\n", user, teamName)
+			// if a match was found, add the user to the list of user IDs to query for
+			if foundUser {
+				userIdList = append(userIdList, memberID)
+				break
 			}
 		}
 	} else if idVal != "" {
@@ -279,14 +314,14 @@ func getUserIdList() []string {
 		userIdList = strings.Split(inputIdList, ",")
 	} else {
 		// otherwise, get the list of user IDs from the team (as the default user list)
-		_, teamList = getTeamList()
+		_, teamList := getTeamList()
 		for _, member := range teamList {
 			userIdList = append(userIdList, member["gitHubId"])
 		}
 	}
 	// if neither flag was used or if an empty string was provided for either then it's an error
 	if len(userIdList) == 0 {
-		fmt.Fprintf(os.Stderr, "ERROR: no matching users found on team '%s'\n", teamName)
+		fmt.Fprintf(os.Stderr, "ERROR: no matching users found on team '%s' or the default team\n", teamName)
 		os.Exit(-1)
 	}
 	return userIdList
@@ -296,13 +331,20 @@ func getUserIdList() []string {
  * a function that can be used to get the list of users on the team to compare
  * against
  */
-func getTeamList() (string, []map[string]string) {
+func getTeamList(inputTeamName ...string) (string, []map[string]string) {
 	// first, get the name of the team to use for comparison (this value should
 	// have been passed in on the command-line)
 	var teamList []map[string]string
 	teamName := ""
-	if val := viper.Get("teamName"); val != nil {
-		teamName = val.(string)
+	if len(inputTeamName) > 1 {
+		fmt.Fprintf(os.Stderr, "ERROR: only a single team name can be passed in; received %v\n", inputTeamName)
+		os.Exit(-1)
+	} else if len(inputTeamName) == 1 {
+		teamName = inputTeamName[0]
+	} else {
+		if val := viper.Get("teamName"); val != nil {
+			teamName = val.(string)
+		}
 	}
 	if teamName == "" {
 		teamName = viper.GetString("default_team")
@@ -340,9 +382,23 @@ func getTeamList() (string, []map[string]string) {
  * a function that can be used to get a time window to use for our queries
  */
 func getQueryTimeWindow() (githubv4.DateTime, githubv4.DateTime) {
-	// first establbish a date time string for the current day at midnight
-	//  (UTC) and make that the ending date time for our query
-	endDateTime := time.Now().UTC().Truncate(time.Hour * 24)
+	// first, get the date to start looking back from (this value should
+	// have been passed in on the command-line, but defaults to the empty string)
+	var endDateTime time.Time
+	endDate := viper.Get("endDate").(string)
+	if endDate != "" {
+		dateTime, err := time.Parse("2006-01-02", endDate)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR: unable to parse end date '%s'; expected format is '2006-01-02'\n", endDate)
+			os.Exit(-1)
+		}
+		endDateTime = dateTime
+	} else {
+		// If here, then no end-date was specified, so choose a default value of
+		// of the current day at midnight (UTC) and make that the ending date time
+		// for our query
+		endDateTime = time.Now().UTC().Truncate(time.Hour * 24)
+	}
 	// then, look back six months from that date time to get the starting date
 	// time to define the start of our query window
 	monthsBack := -viper.Get("monthsBack").(int)
@@ -904,6 +960,76 @@ func getAllContribsByTypeList() {
 	fmt.Fprintf(os.Stdout, "%s\n", string(jsonStr))
 }
 
+/*
+	query MyQuery {
+	search(query: "-orb in:name org:circleci-public", type: REPOSITORY, first: 100) {
+		nodes {
+			... on Repository {
+				name
+				isPrivate
+				isArchived
+			}
+		}
+		repositoryCount
+	}
+	}
+*/
+
+/*
+ * define the function that is used to fetch a list of the Orb repositories
+ * managed by the team under the named organizations
+ */
+func fetchOrbRepositoryList() map[string]interface{} {
+	// first, get a new GitHub GraphQL API client
+	client := getAuthenticatedClient()
+	// initialize the vars map that we'll use when making our query for PR review contributions
+	vars := map[string]interface{}{
+		"query": githubv4.String("-orb in:name org:CircleCI-Public"),
+		"type":  githubv4.SearchTypeRepository,
+		"first": githubv4.Int(100),
+	}
+	// and initialize a map to that will be used to hold the details for
+	// all of the pull request reviews made by this user
+	orbRepositoryList := map[string]interface{}{}
+	// run our query, returning the results in the PullRequestReviewsPerformedQuery struct
+	err := client.Query(context.Background(), &RepositorySearchQuery, vars)
+	if err != nil {
+		// Handle error.
+		fmt.Fprintf(os.Stderr, "ERR: %v\n", err)
+		os.Exit(1)
+	}
+	// grab out the list of edges from the pull request review
+	// contributions made and loop over them
+	edges := RepositorySearchQuery.Search.Edges
+	fmt.Fprintf(os.Stderr, "Found %d orb repositories in CircleCI-Public Org\n", len(edges))
+	for _, edge := range edges {
+		// if here, then we haven't seen this repository yet so create a new entry for it
+		orbRepositoryList[edge.Node.Repository.Name] = map[string]interface{}{
+			"private":  edge.Node.Repository.IsPrivate,
+			"archived": edge.Node.Repository.IsArchived,
+			"url":      edge.Node.Repository.Url,
+		}
+	}
+	return orbRepositoryList
+}
+
+/*
+ * define the function that is used to print (as a JSON string) the information
+ * for all of the pull request contributions (both pull requests, and pull request reviews)
+ * made by the named user(s) against repositories under the named org(s)
+ */
+func getOrbRepositoryList() {
+	// get the list of orb repositories
+	orbRepoList := fetchOrbRepositoryList()
+	// and dump out the results
+	jsonStr, err := json.MarshalIndent(orbRepoList, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
+		os.Exit(-2)
+	}
+	fmt.Fprintf(os.Stdout, "%s\n", string(jsonStr))
+}
+
 // setup the root command, a couple of subcommands and the variables that we set using the
 // flags in those commands
 var (
@@ -913,6 +1039,7 @@ var (
 	gitHubIdList string
 	compTeam     string
 	orgList      string
+	endDate      string
 	monthsBack   int
 
 	rootCmd = &cobra.Command{
@@ -921,6 +1048,18 @@ var (
 		Long: `Gathers contribution information for a named set of GitHub users
 (provided on the command-line or in an associated configuration file) to
 any repositories under the named set of GitHub organizations.`,
+	}
+)
+
+var (
+	orbRepositoryList = &cobra.Command{
+		Use:   "orbRepositoryList",
+		Short: "Generates a list of Orb repository names (with additional metadata)",
+		Long: `Constructs a list of the current Orb repositories that are in the
+CircleCI-Public GitHub organization.`,
+		Run: func(cmd *cobra.Command, args []string) {
+			getOrbRepositoryList()
+		},
 	}
 )
 
@@ -936,6 +1075,7 @@ the named set of GitHub organizations.`,
 		},
 	}
 )
+
 var (
 	pullRequestList = &cobra.Command{
 		Use:   "pullRequestList",
@@ -1025,6 +1165,7 @@ func main() {
 	rootCmd.PersistentFlags().StringVarP(&gitHubIdList, "github-id-list", "i", "", "list of GitHub IDs to gather contributions for")
 	rootCmd.PersistentFlags().StringVarP(&orgList, "org-list", "o", "", "list of orgs to gather contributions to")
 	rootCmd.PersistentFlags().IntVarP(&monthsBack, "months-back", "m", 6, "length of time to look back (in months; defaults to 6)")
+	rootCmd.PersistentFlags().StringVarP(&endDate, "end-date", "d", "", "date to start looking back from (in YYYY-MM-DD format)")
 
 	// this flag is only used for the summaryOfContribs command
 	summaryOfContribs.PersistentFlags().StringVarP(&compTeam, "team", "t", "", "name of team to compare contributions against")
@@ -1035,6 +1176,7 @@ func main() {
 	rootCmd.AddCommand(summaryOfContribs)
 	rootCmd.AddCommand(contributionList)
 	rootCmd.AddCommand(allContribsByTypeList)
+	rootCmd.AddCommand(orbRepositoryList)
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
 	viper.BindPFlag("outputFile", rootCmd.PersistentFlags().Lookup("file"))
@@ -1043,6 +1185,7 @@ func main() {
 	viper.BindPFlag("teamName", summaryOfContribs.PersistentFlags().Lookup("team"))
 	viper.BindPFlag("orgList", rootCmd.PersistentFlags().Lookup("org-list"))
 	viper.BindPFlag("monthsBack", rootCmd.PersistentFlags().Lookup("months-back"))
+	viper.BindPFlag("endDate", rootCmd.PersistentFlags().Lookup("end-date"))
 
 	// finally, execute the root command to trigger the underlying process for this app
 	if err := rootCmd.Execute(); err != nil {
