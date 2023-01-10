@@ -74,22 +74,15 @@ func GetUserIdList() []string {
 		// retrieve the details for the input team (or the default team if a team
 		// was not specified on the comamand line)
 		teamName, teamList = GetTeamList()
-		_, defaultTeamList := GetTeamList(viper.GetString("default_team"))
 		for _, user := range userList {
 			foundUser, memberID := findUserInTeam(teamList, user)
 			// if a match was not found, check for a match in the default team
 			if !foundUser {
-				foundUser, memberID = findUserInTeam(defaultTeamList, user)
-				// if a match was still not found in the default team, print a warning and continue
-				if !foundUser {
-					fmt.Fprintf(os.Stderr, "WARNING: user '%s' not found on the team '%s'; skipping\n", user, teamName)
-				}
+				fmt.Fprintf(os.Stderr, "WARNING: user '%s' not found on the team '%s'; skipping\n", user, teamName)
+				continue
 			}
-			// if a match was found, add the user to the list of user IDs to query for
-			if foundUser {
-				userIdList = append(userIdList, memberID)
-				break
-			}
+			// a match was found, add the user to the list of user IDs to query for
+			userIdList = append(userIdList, memberID)
 		}
 	} else if idVal != "" {
 		inputIdList := idVal.(string)
@@ -105,7 +98,7 @@ func GetUserIdList() []string {
 	}
 	// if neither flag was used or if an empty string was provided for either then it's an error
 	if len(userIdList) == 0 {
-		fmt.Fprintf(os.Stderr, "ERROR: no matching users found on team '%s' or the default team\n", teamName)
+		fmt.Fprintf(os.Stderr, "ERROR: no matching users found on team '%s'\n", teamName)
 		os.Exit(-1)
 	}
 	return userIdList

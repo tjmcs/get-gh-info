@@ -8,7 +8,7 @@
   - &Eric {user: Eric, name: Eric Ribeiro, gitHubId: EricRibeiro}
   - &Ryan {user: Ryan, name: Ryan Bourdais, gitHubId: ryanbourdais}
 teams:
-  images: [*Ricardo, *Adam, *Jeff, &Ryan]
+  images: [*Ricardo, *Adam, *Jeff, *Ryan]
   orbs: [*Kyle, *Brian, *Eric]
   cpe_team: *cpeTeam
   junior_members:
