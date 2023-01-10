@@ -1,4 +1,4 @@
-module github.com/tjmcs/get-gh-contribs
+module github.com/tjmcs/get-gh-info
 
 go 1.17
 

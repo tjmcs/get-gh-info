@@ -1,0 +1,99 @@
+/*
+Copyright © 2023 NAME HERE <EMAIL ADDRESS>
+*/
+package cmd
+
+import (
+	"fmt"
+	"os"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+// rootCmd represents the base command when called without any subcommands
+var (
+	cfgFile      string
+	outputFile   string
+	userList     string
+	gitHubIdList string
+	orgList      string
+	endDate      string
+	monthsBack   int
+
+	rootCmd = &cobra.Command{
+		Use:   "getGhInfo",
+		Short: "Gathers information from GitHub using the GitHub GraphQL API",
+		Long: `Gathers the requested information from GitHub using the GitHub GraphQL API
+(where the input parameters for the query to run are provided either on the
+command-line or in an associated configuration file) and outputs the results`,
+	}
+)
+
+// Execute adds all child commands to the root command and sets flags appropriately.
+// This is called by main.main(). It only needs to happen once to the rootCmd.
+func Execute() {
+	err := rootCmd.Execute()
+	if err != nil {
+		os.Exit(1)
+	}
+}
+
+func init() {
+	cobra.OnInitialize(initConfig)
+
+	// Here you will define your flags and configuration settings.
+	// Cobra supports persistent flags, which, if defined here,
+	// will be global for your application.
+	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "configuration file to use")
+	rootCmd.PersistentFlags().StringVarP(&outputFile, "file", "f", "", "file/stream to output data to (defaults to standard output)")
+	rootCmd.PersistentFlags().StringVarP(&userList, "user-list", "u", "", "list of users to gather contributions for")
+	rootCmd.PersistentFlags().StringVarP(&gitHubIdList, "github-id-list", "i", "", "list of GitHub IDs to gather contributions for")
+	rootCmd.PersistentFlags().StringVarP(&orgList, "org-list", "o", "", "list of orgs to gather contributions to")
+	rootCmd.PersistentFlags().IntVarP(&monthsBack, "months-back", "m", 6, "length of time to look back (in months; defaults to 6)")
+	rootCmd.PersistentFlags().StringVarP(&endDate, "end-date", "d", "", "date to start looking back from (in YYYY-MM-DD format)")
+	// Cobra also supports local flags, which will only run
+	// when this action is called directly.
+
+	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
+	viper.BindPFlag("outputFile", rootCmd.PersistentFlags().Lookup("file"))
+	viper.BindPFlag("userList", rootCmd.PersistentFlags().Lookup("user-list"))
+	viper.BindPFlag("gitHubIdList", rootCmd.PersistentFlags().Lookup("github-id-list"))
+	viper.BindPFlag("orgList", rootCmd.PersistentFlags().Lookup("org-list"))
+	viper.BindPFlag("monthsBack", rootCmd.PersistentFlags().Lookup("months-back"))
+	viper.BindPFlag("endDate", rootCmd.PersistentFlags().Lookup("end-date"))
+}
+
+// initConfig reads in config file and ENV variables if set.
+func initConfig() {
+	if cfgFile != "" {
+		// if a configuration file was passed in, use it
+		viper.SetConfigFile(cfgFile)
+		viper.SetConfigType("yaml")
+	} else {
+		// Find home directory.
+		home, err := os.UserHomeDir()
+		cobra.CheckErr(err)
+		// Add a config with name "getGhInfo" (with or without extension)
+		// in the '$HOME/.config' directory to the search path
+		viper.SetConfigName("getGhInfo")
+		viper.SetConfigType("yaml")
+		viper.AddConfigPath(fmt.Sprintf("%s/.config", home))
+		// and add a config with the name "config" (with or without extension)
+		// in the current working directory to the search path (note that files
+		// added later take precedence over those added earlier)
+		viper.SetConfigName("config")
+		viper.AddConfigPath(".")
+	}
+
+	// read in environment variables that match
+	viper.AutomaticEnv()
+
+	// If a config file is found, read it in.
+	if err := viper.ReadInConfig(); err == nil {
+		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+	} else {
+		fmt.Fprintf(os.Stderr, "Error reading config file: %v\n", err)
+		os.Exit(1)
+	}
+}
