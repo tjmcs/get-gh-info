@@ -13,13 +13,9 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var (
-	cfgFile      string
-	outputFile   string
-	userList     string
-	gitHubIdList string
-	orgList      string
-	endDate      string
-	monthsBack   int
+	cfgFile    string
+	outputFile string
+	orgList    string
 
 	rootCmd = &cobra.Command{
 		Use:   "getGhInfo",
@@ -35,7 +31,7 @@ command-line or in an associated configuration file) and outputs the results`,
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
-		os.Exit(1)
+		os.Exit(2)
 	}
 }
 
@@ -47,21 +43,13 @@ func init() {
 	// will be global for your application.
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "configuration file to use")
 	rootCmd.PersistentFlags().StringVarP(&outputFile, "file", "f", "", "file/stream to output data to (defaults to standard output)")
-	rootCmd.PersistentFlags().StringVarP(&userList, "user-list", "u", "", "list of users to gather contributions for")
-	rootCmd.PersistentFlags().StringVarP(&gitHubIdList, "github-id-list", "i", "", "list of GitHub IDs to gather contributions for")
-	rootCmd.PersistentFlags().StringVarP(&orgList, "org-list", "o", "", "list of orgs to gather contributions to")
-	rootCmd.PersistentFlags().IntVarP(&monthsBack, "months-back", "m", 6, "length of time to look back (in months; defaults to 6)")
-	rootCmd.PersistentFlags().StringVarP(&endDate, "end-date", "d", "", "date to start looking back from (in YYYY-MM-DD format)")
+	rootCmd.PersistentFlags().StringVarP(&orgList, "org-list", "o", "", "list of orgs to gather information from")
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
 	viper.BindPFlag("outputFile", rootCmd.PersistentFlags().Lookup("file"))
-	viper.BindPFlag("userList", rootCmd.PersistentFlags().Lookup("user-list"))
-	viper.BindPFlag("gitHubIdList", rootCmd.PersistentFlags().Lookup("github-id-list"))
 	viper.BindPFlag("orgList", rootCmd.PersistentFlags().Lookup("org-list"))
-	viper.BindPFlag("monthsBack", rootCmd.PersistentFlags().Lookup("months-back"))
-	viper.BindPFlag("endDate", rootCmd.PersistentFlags().Lookup("end-date"))
 }
 
 // initConfig reads in config file and ENV variables if set.
@@ -94,6 +82,6 @@ func initConfig() {
 		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
 	} else {
 		fmt.Fprintf(os.Stderr, "Error reading config file: %v\n", err)
-		os.Exit(1)
+		os.Exit(3)
 	}
 }

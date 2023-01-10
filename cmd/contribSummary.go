@@ -5,7 +5,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -22,18 +21,18 @@ var (
 	compTeam          string
 	contribSummaryCmd = &cobra.Command{
 		Use:   "contribSummary",
-		Short: "Generates a summary (including statistics) of contributions (by user)",
-		Long: `Constructs a summary (by user) of all of the contributions that each
-of the input users made to any repository to any of the repositories in
-the named set of GitHub organizations.`,
+		Short: "Generates a summary (including statistics) of contributions",
+		Long: `Constructs a summary (including statistics) of all of the contributions
+that each of the input users made to any repository to any of the repositories
+in the named set of GitHub organizations.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			getSummaryOfContribs()
+			utils.DumpMapAsJSON(summaryOfContribs())
 		},
 	}
 )
 
 func init() {
-	rootCmd.AddCommand(contribSummaryCmd)
+	userCmd.AddCommand(contribSummaryCmd)
 
 	// Here you will define your flags and configuration settings.
 	contribSummaryCmd.PersistentFlags().StringVarP(&compTeam, "team", "t", "", "name of team to compare contributions against")
@@ -52,7 +51,7 @@ func init() {
  * define the function that is used to gather GitHub summary information
  * for the contrributions made by the named user(s) to the named org(s)
  */
-func fetchSummaryOfContribs() map[string]interface{} {
+func summaryOfContribs() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// and then get the list of organization IDs that we want to query
@@ -142,19 +141,6 @@ func fetchSummaryOfContribs() map[string]interface{} {
 		userMap["teamPcntReposWithContribPullReqReviews"] = math.Round(((float64(userMap["reposWithContribPullReqReviews"].(int)))/avgReposWithContribPullReqReviews-1)*10000) / 100
 	}
 
-	// and return the resulting list
+	// and return the resulting map
 	return contribByUserSummary
-}
-
-func getSummaryOfContribs() {
-	// fetch the list of PRs made by the named user(s) against repositories
-	// under the named org(s)
-	pullRequestsByUser := fetchSummaryOfContribs()
-	// and dump out the results
-	jsonStr, err := json.MarshalIndent(pullRequestsByUser, "", "  ")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
-		os.Exit(-2)
-	}
-	fmt.Fprintf(os.Stdout, "%s\n", string(jsonStr))
 }

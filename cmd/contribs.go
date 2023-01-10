@@ -5,7 +5,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -18,18 +17,18 @@ import (
 var (
 	contribsCmd = &cobra.Command{
 		Use:   "contribs",
-		Short: "Generates a list of any contributions made (by user)",
-		Long: `Constructs a list (by user) of any contributions made
-(commits and pull requests) by each of the input users against any
-of the repositories in the named set of GitHub organizations.`,
+		Short: "Generates a list of commits and PRs made",
+		Long: `Constructs a list of any contributions made (commits and PRs) by each of
+the input users against any of the repositories in the named set of GitHub
+organizations.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			getUserContribs()
+			utils.DumpMapAsJSON(contribs())
 		},
 	}
 )
 
 func init() {
-	rootCmd.AddCommand(contribsCmd)
+	userCmd.AddCommand(contribsCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -96,7 +95,7 @@ var ContributionsMadeQuery struct {
  * for the contributions made by the named user(s) against repositories under
  * the named org(s)
  */
-func fetchUserContribs() map[string]interface{} {
+func contribs() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// and then get the list of organization IDs that we want to query
@@ -206,24 +205,6 @@ func fetchUserContribs() map[string]interface{} {
 	// finally add an "AllUsers" entry to the list of contributions made by all users to each repository
 	contribsByUser["AllUsers"] = contribsByRepo
 
-	// and return the resulting list
+	// and return the resulting map
 	return contribsByUser
-}
-
-/*
- * define the function that is used to print (as a JSON string) the GitHub
- * contribution information for the contributions made by the named user(s) against
- * repositories under the named org(s)
- */
-func getUserContribs() {
-	// fetch the list of PRs made by the named user(s) against repositories
-	// under the named org(s)
-	pullRequestsByUser := fetchUserContribs()
-	// and dump out the results
-	jsonStr, err := json.MarshalIndent(pullRequestsByUser, "", "  ")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
-		os.Exit(-2)
-	}
-	fmt.Fprintf(os.Stdout, "%s\n", string(jsonStr))
 }

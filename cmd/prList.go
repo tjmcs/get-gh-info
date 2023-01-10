@@ -5,7 +5,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"os"
@@ -19,18 +18,18 @@ import (
 // prlistCmd represents the 'prlist' command
 var prlistCmd = &cobra.Command{
 	Use:   "prList",
-	Short: "Generates a list the pull requests made (by user)",
-	Long: `Constructs a list (by user) of all of the pull requests that each
-of the input users made to any repository to any of the repositories in
-the named set of GitHub organizations (including the title, status, url,
-and repository name) for each pull request submitted by that user.`,
+	Short: "Generates a list the pull requests made",
+	Long: `Constructs a list of all of the pull requests that each of the input users
+made to any repository to any of the repositories in the named set of GitHub
+organizations (including the title, status, url, and repository name) for each
+pull request submitted by that user.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		getPrList()
+		utils.DumpMapAsJSON(prList())
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(prlistCmd)
+	userCmd.AddCommand(prlistCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -115,7 +114,7 @@ var PullRequestsMadeQuery struct {
  * for the pull requests made by the named user(s) against repositories under
  * the named org(s)
  */
-func fetchPrList() map[string]interface{} {
+func prList() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// and then get the list of organization IDs that we want to query
@@ -247,22 +246,4 @@ func fetchPrList() map[string]interface{} {
 	// finally add an "AllUsers" entry to the list of contributions made by all users to each repository
 	pullRequestsByUser["AllUsers"] = prsByRepo
 	return pullRequestsByUser
-}
-
-/*
- * define the function that is used to print (as a JSON string) the GitHub pull
- * request information for the pull requests made by the named user(s) against
- * repositories under the named org(s)
- */
-func getPrList() {
-	// fetch the list of PRs made by the named user(s) against repositories
-	// under the named org(s)
-	pullRequestsByUser := fetchPrList()
-	// and dump out the results
-	jsonStr, err := json.MarshalIndent(pullRequestsByUser, "", "  ")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
-		os.Exit(-2)
-	}
-	fmt.Fprintf(os.Stdout, "%s\n", string(jsonStr))
 }

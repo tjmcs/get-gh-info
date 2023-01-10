@@ -5,7 +5,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 
@@ -18,22 +17,22 @@ import (
 // repoListCmd represents the 'repoList' command
 var (
 	searchPattern string
-	repoListCmd   = &cobra.Command{
-		Use:   "repoList",
+	matchCmd      = &cobra.Command{
+		Use:   "match",
 		Short: "Generates a list of repositories that match the search criteria",
-		Long: `Constructs a list of all of the repositories that match the search criteria
-passed in by the user from the named set of GitHub organizations.`,
+		Long: `Constructs a list of all of the repositories who's name matches the search
+criteria passed in by the user from the named set of GitHub organizations.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			getRepoList()
+			utils.DumpMapAsJSON(repoList())
 		},
 	}
 )
 
 func init() {
-	rootCmd.AddCommand(repoListCmd)
+	repoCmd.AddCommand(matchCmd)
 
 	// Here you will define your flags and configuration settings.
-	repoListCmd.PersistentFlags().StringVarP(&searchPattern, "search-pattern", "p", "", "pattern to match against repository names")
+	matchCmd.PersistentFlags().StringVarP(&searchPattern, "search-pattern", "p", "", "pattern to match against repository names")
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
@@ -42,7 +41,7 @@ func init() {
 	// is called directly, e.g.:
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("searchPattern", repoListCmd.PersistentFlags().Lookup("searchPattern"))
+	viper.BindPFlag("searchPattern", matchCmd.PersistentFlags().Lookup("searchPattern"))
 }
 
 /*
@@ -70,7 +69,7 @@ var RepositorySearchQuery struct {
  * define the function that is used to fetch a list of the Orb repositories
  * managed by the team under the named organizations
  */
-func fetchRepoList() map[string]interface{} {
+func repoList() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// initialize the vars map that we'll use when making our query for PR review contributions
@@ -112,21 +111,4 @@ func fetchRepoList() map[string]interface{} {
 		}
 	}
 	return repositoryList
-}
-
-/*
- * define the function that is used to print (as a JSON string) the information
- * for all of the pull request contributions (both pull requests, and pull request reviews)
- * made by the named user(s) against repositories under the named org(s)
- */
-func getRepoList() {
-	// get the list of orb repositories
-	repoList := fetchRepoList()
-	// and dump out the results
-	jsonStr, err := json.MarshalIndent(repoList, "", "  ")
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %s", err.Error())
-		os.Exit(-2)
-	}
-	fmt.Fprintf(os.Stdout, "%s\n", string(jsonStr))
 }

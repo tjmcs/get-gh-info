@@ -4,6 +4,7 @@ Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 package utils
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -99,7 +100,7 @@ func GetUserIdList() []string {
 	// if neither flag was used or if an empty string was provided for either then it's an error
 	if len(userIdList) == 0 {
 		fmt.Fprintf(os.Stderr, "ERROR: no matching users found on team '%s'\n", teamName)
-		os.Exit(-1)
+		os.Exit(-2)
 	}
 	return userIdList
 }
@@ -115,7 +116,7 @@ func GetTeamList(inputTeamName ...string) (string, []map[string]string) {
 	teamName := ""
 	if len(inputTeamName) > 1 {
 		fmt.Fprintf(os.Stderr, "ERROR: only a single team name can be passed in; received %v\n", inputTeamName)
-		os.Exit(-1)
+		os.Exit(-3)
 	} else if len(inputTeamName) == 1 {
 		teamName = inputTeamName[0]
 	} else {
@@ -127,21 +128,21 @@ func GetTeamList(inputTeamName ...string) (string, []map[string]string) {
 		teamName = viper.GetString("default_team")
 		if teamName == "" {
 			fmt.Fprintf(os.Stderr, "ERROR: team name is a required argument; use the '--team, -t' flag or define a 'default_team' config value\n")
-			os.Exit(-1)
+			os.Exit(-4)
 		}
 	}
 	// next, look for that team name under the 'teams' config value
 	teamsMap := viper.Get("teams")
 	if teamsMap == nil {
 		fmt.Fprintf(os.Stderr, "ERROR: unable to find the required 'teams' map in the configuration file\n")
-		os.Exit(-1)
+		os.Exit(-5)
 	} else {
 		// if found an entry by that name, then construct a new list of maps of strings
 		// strings containing the members of that team
 		teamMap := teamsMap.(map[string]interface{})[teamName]
 		if teamMap == nil {
 			fmt.Fprintf(os.Stderr, "ERROR: unrecognized team name '%s'\n", teamName)
-			os.Exit(-1)
+			os.Exit(-6)
 		}
 		// construct the list of team members as a list of maps of strings to strings
 		for _, member := range teamMap.([]interface{}) {
@@ -182,4 +183,20 @@ func GetQueryTimeWindow() (githubv4.DateTime, githubv4.DateTime) {
 	startDateTime := endDateTime.AddDate(0, monthsBack, 0)
 	// and return the results
 	return githubv4.DateTime{startDateTime}, githubv4.DateTime{endDateTime}
+}
+
+/*
+ * a function that can be used to dump out the results of the query as a
+ * formatted JSON string
+ */
+
+func DumpMapAsJSON(results map[string]interface{}) {
+	// first, get the JSON encoding of the results
+	jsonBytes, err := json.MarshalIndent(results, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: unable to marshal results to JSON: %v", err)
+		os.Exit(-7)
+	}
+	// then, print the results to stdout
+	fmt.Println(string(jsonBytes))
 }
