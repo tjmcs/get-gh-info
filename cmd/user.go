@@ -10,10 +10,10 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var (
-	userList     string
-	gitHubIdList string
-	endDate      string
-	monthsBack   int
+	userList      string
+	gitHubIdList  string
+	referenceDate string
+	duration      string
 
 	userCmd = &cobra.Command{
 		Use:   "user",
@@ -31,8 +31,8 @@ func init() {
 	// and all subcommands, e.g.:
 	userCmd.PersistentFlags().StringVarP(&userList, "user-list", "u", "", "list of users to gather contributions for")
 	userCmd.PersistentFlags().StringVarP(&gitHubIdList, "github-id-list", "i", "", "list of GitHub IDs to gather contributions for")
-	userCmd.PersistentFlags().IntVarP(&monthsBack, "months-back", "m", 6, "length of time to look back in months")
-	userCmd.PersistentFlags().StringVarP(&endDate, "end-date", "d", "", "date to start looking back from (in YYYY-MM-DD format)")
+	userCmd.PersistentFlags().StringVarP(&duration, "lookback-time", "l", "", "duration of 'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
+	userCmd.PersistentFlags().StringVarP(&referenceDate, "ref-date", "d", "", "reference date for time window (in YYYY-MM-DD format)")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
@@ -40,6 +40,6 @@ func init() {
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
 	viper.BindPFlag("userList", userCmd.PersistentFlags().Lookup("user-list"))
 	viper.BindPFlag("gitHubIdList", userCmd.PersistentFlags().Lookup("github-id-list"))
-	viper.BindPFlag("monthsBack", userCmd.PersistentFlags().Lookup("months-back"))
-	viper.BindPFlag("endDate", userCmd.PersistentFlags().Lookup("end-date"))
+	viper.BindPFlag("lookbackTime", userCmd.PersistentFlags().Lookup("lookback-time"))
+	viper.BindPFlag("referenceDate", userCmd.PersistentFlags().Lookup("ref-date"))
 }

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -157,32 +159,111 @@ func GetTeamList(inputTeamName ...string) (string, []map[string]string) {
 }
 
 /*
+ * a function that can be used to parse the "lookback time" string value can be passed in
+ * on the command-line; supported time units include:
+ *     - days (e.g. "7d")
+ *     - weeks (e.g. "12w")
+ *     - months (e.g. "3m"); here a month is assumed to be 30 days for convenience
+ *     - quarters (e.g. "2q"); here a quarter is assumed to be 90 days for convenience
+ *     - years (e.g. "1y")
+ *
+ * it should be noted that due to limitations in the GitHub GraphQL API, the maximum
+ * lookback time is limited to one year
+ */
+func getLookbackDuration(lookBackStr string) time.Duration {
+	// define a regular expression to parse the lookback string
+	parsePattern := "^([+-]?[0-9]+)(d|w|m|q|y)$"
+	re := regexp.MustCompile(parsePattern)
+	// search for a match in the lookback string
+	matches := re.FindStringSubmatch(lookBackStr)
+	if matches == nil {
+		fmt.Fprintf(os.Stderr, "ERROR: unable to parse duration '%s'; expected format is '[+-]?[0-9]+[dwmqy]'\n", lookBackStr)
+		os.Exit(-1)
+	}
+	// if a match was found, grab the value
+	durationVal, err := strconv.Atoi(matches[1])
+	// and use the accompanying time unit to return the appropriate time.Duration value
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: unable to parse duration '%s'; expected format is '[+-]?[0-9]+[dwmqy]'\n", lookBackStr)
+		os.Exit(-1)
+	}
+	switch matches[2] {
+	case "d":
+		return time.Duration(durationVal) * 24 * time.Hour
+	case "w":
+		return time.Duration(durationVal) * 7 * 24 * time.Hour
+	case "m":
+		return time.Duration(durationVal) * 30 * 24 * time.Hour
+	case "q":
+		return time.Duration(durationVal) * 3 * 30 * 24 * time.Hour
+	case "y":
+		return time.Duration(durationVal) * 365 * 24 * time.Hour
+	default:
+		fmt.Fprintf(os.Stderr, "ERROR: unable to parse duration '%s'; expected format is '[+-]?[0-9]+[dwmqy]'\n", lookBackStr)
+		os.Exit(-1)
+	}
+	return 0
+}
+
+/*
  * a function that can be used to get a time window to use for our queries
  */
 func GetQueryTimeWindow() (githubv4.DateTime, githubv4.DateTime) {
 	// first, get the date to start looking back from (this value should
 	// have been passed in on the command-line, but defaults to the empty string)
-	var endDateTime time.Time
-	endDate := viper.Get("endDate").(string)
-	if endDate != "" {
-		dateTime, err := time.Parse("2006-01-02", endDate)
+	var refDateTime time.Time
+	var startDateTime time.Time
+	referenceDate := viper.Get("referenceDate").(string)
+	// next, look for the "lookbackTime" value that we should use (this value can
+	// be passed in on the command-line, but defaults to the empty string)
+	lookBackStr := viper.Get("lookbackTime").(string)
+	if referenceDate != "" {
+		dateTime, err := time.Parse("2006-01-02", referenceDate)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "ERROR: unable to parse end date '%s'; expected format is '2006-01-02'\n", endDate)
+			fmt.Fprintf(os.Stderr, "ERROR: unable to parse end date '%s'; expected format is '2006-01-02'\n", referenceDate)
 			os.Exit(-1)
 		}
-		endDateTime = dateTime
+		refDateTime = dateTime
 	} else {
 		// If here, then no end-date was specified, so choose a default value of
 		// of the current day at midnight (UTC) and make that the ending date time
 		// for our query
-		endDateTime = time.Now().UTC().Truncate(time.Hour * 24)
+		refDateTime = time.Now().UTC().Truncate(time.Hour * 24)
 	}
-	// then, look back six months from that date time to get the starting date
-	// time to define the start of our query window
-	monthsBack := -viper.Get("monthsBack").(int)
-	startDateTime := endDateTime.AddDate(0, monthsBack, 0)
-	// and return the results
-	return githubv4.DateTime{startDateTime}, githubv4.DateTime{endDateTime}
+	// if a lookback time was specified, then use that to define the start of our
+	// query window
+	if lookBackStr != "" {
+		// get the lookback duration
+		lookBackDuration := getLookbackDuration(lookBackStr)
+		// if a negative lookback time was specified, then the start of our query window is the
+		// reference date time and the end of our query window is the absolute value of that lookback
+		// time added to the start date time
+		if lookBackDuration < 0 {
+			startDateTime = refDateTime
+			refDateTime = refDateTime.Add(-lookBackDuration)
+		} else {
+			// otherwise, subtract the lookback time from the reference date time to get the
+			// start of our query window
+			startDateTime = refDateTime.Add(-lookBackDuration)
+		}
+		// and return the results
+		fmt.Fprintf(os.Stderr, "         time window will be from %s to %s\n", startDateTime, refDateTime)
+		return githubv4.DateTime{startDateTime}, githubv4.DateTime{refDateTime}
+	}
+	// if a lookback time was not specified, but a reference time was, then the start
+	// of our query window is the reference date time and the end of our query window
+	// is the curren date time
+	if referenceDate != "" {
+		fmt.Fprintf(os.Stderr, "WARNING: no lookback time specified; using reference date as start of time window\n")
+		fmt.Fprintf(os.Stderr, "        time window will be from %s to %s\n", refDateTime, time.Now().UTC().Truncate(time.Hour*24))
+		return githubv4.DateTime{refDateTime}, githubv4.DateTime{time.Now().UTC().Truncate(time.Hour * 24)}
+	}
+	// otherwise, if neither a lookback time nor a reference time was specified, then
+	// assume a default lookback time of 90 days from the current date time
+	startDateTime = refDateTime.Add(-90 * 24 * time.Hour)
+	fmt.Fprintf(os.Stderr, "WARNING: no lookback time or reference date specified; using default lookback time of 90 days\n")
+	fmt.Fprintf(os.Stderr, "         time window will be from %s to %s\n", startDateTime, refDateTime)
+	return githubv4.DateTime{startDateTime}, githubv4.DateTime{refDateTime}
 }
 
 /*
