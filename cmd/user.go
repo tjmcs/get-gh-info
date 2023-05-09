@@ -31,7 +31,7 @@ func init() {
 	// and all subcommands, e.g.:
 	userCmd.PersistentFlags().StringVarP(&userList, "user-list", "u", "", "list of users to gather contributions for")
 	userCmd.PersistentFlags().StringVarP(&gitHubIdList, "github-id-list", "i", "", "list of GitHub IDs to gather contributions for")
-	userCmd.PersistentFlags().StringVarP(&duration, "lookback-time", "l", "", "duration of 'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
+	userCmd.PersistentFlags().StringVarP(&duration, "lookback-time", "l", "", "the 'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 	userCmd.PersistentFlags().StringVarP(&referenceDate, "ref-date", "d", "", "reference date for time window (in YYYY-MM-DD format)")
 
 	// Cobra supports local flags which will only run when this command

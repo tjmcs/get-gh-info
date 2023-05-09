@@ -16,6 +16,9 @@ import (
 	"github.com/spf13/viper"
 )
 
+// define a default lookback time of 90 days
+const defaultLookbackDays = 90
+
 // and a method to see if a slice of strings contains a given string
 func SliceContains(sl []string, name string) bool {
 	for _, v := range sl {
@@ -247,7 +250,6 @@ func GetQueryTimeWindow() (githubv4.DateTime, githubv4.DateTime) {
 			startDateTime = refDateTime.Add(-lookBackDuration)
 		}
 		// and return the results
-		fmt.Fprintf(os.Stderr, "         time window will be from %s to %s\n", startDateTime, refDateTime)
 		return githubv4.DateTime{startDateTime}, githubv4.DateTime{refDateTime}
 	}
 	// if a lookback time was not specified, but a reference time was, then the start
@@ -255,14 +257,12 @@ func GetQueryTimeWindow() (githubv4.DateTime, githubv4.DateTime) {
 	// is the curren date time
 	if referenceDate != "" {
 		fmt.Fprintf(os.Stderr, "WARNING: no lookback time specified; using reference date as start of time window\n")
-		fmt.Fprintf(os.Stderr, "        time window will be from %s to %s\n", refDateTime, time.Now().UTC().Truncate(time.Hour*24))
 		return githubv4.DateTime{refDateTime}, githubv4.DateTime{time.Now().UTC().Truncate(time.Hour * 24)}
 	}
 	// otherwise, if neither a lookback time nor a reference time was specified, then
 	// assume a default lookback time of 90 days from the current date time
-	startDateTime = refDateTime.Add(-90 * 24 * time.Hour)
+	startDateTime = refDateTime.Add(-defaultLookbackDays * 24 * time.Hour)
 	fmt.Fprintf(os.Stderr, "WARNING: no lookback time or reference date specified; using default lookback time of 90 days\n")
-	fmt.Fprintf(os.Stderr, "         time window will be from %s to %s\n", startDateTime, refDateTime)
 	return githubv4.DateTime{startDateTime}, githubv4.DateTime{refDateTime}
 }
 
