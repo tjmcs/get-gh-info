@@ -1,25 +1,33 @@
 
 .cpe_members: &cpeTeam
   - &Ricardo {user: Ricardo, name: Ricardo Feliciano, gitHubId: felicianotech}
+  - &Romain {user: Romain, name: Romain Sylvian, gitHubId: rsylvian}
   - &Adam {user: Adam, name: Adam Hartley, gitHubId: BytesGuy}
   - &Jeff {user: Jeff, name: Jeff Chen, gitHubId: Jalexchen}
   - &Kyle {user: Kyle, name: Kyle Tryon, gitHubId: KyleTryon}
   - &Brian {user: Brian, name: Brian Vu, gitHubId: brivu}
   - &Eric {user: Eric, name: Eric Ribeiro, gitHubId: EricRibeiro}
   - &Ryan {user: Ryan, name: Ryan Bourdais, gitHubId: ryanbourdais}
+  - &Kat {user: Kat, name: Kat Batuigas, gitHubId: kbatuigas}
+  - &Rosie {user: Rosie, name: Rosie Yohannan, gitHubId: rosieyohannan}
 teams:
-  images: [*Ricardo, *Adam, *Jeff, *Ryan]
+  images: [*Adam, *Jeff, *Ryan]
   orbs: [*Kyle, *Brian, *Eric]
+  dre: [*Ricardo, *Romain, *Rosie, *Kat]
   cpe_team: *cpeTeam
   junior_members:
     - *Brian
-    - *Eric
     - *Jeff
     - *Ryan
   senior_members:
     - *Ricardo
+    - *Romain
     - *Kyle
     - *Adam
+    - *Eric
+  tech_writers:
+    - *Rosie
+    - *Kat
 default_team: cpe_team
 orgs:
   - circleci
