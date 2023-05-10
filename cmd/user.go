@@ -14,6 +14,7 @@ var (
 	gitHubIdList  string
 	referenceDate string
 	duration      string
+	completeWeeks bool
 
 	userCmd = &cobra.Command{
 		Use:   "user",
@@ -33,6 +34,7 @@ func init() {
 	userCmd.PersistentFlags().StringVarP(&gitHubIdList, "github-id-list", "i", "", "list of GitHub IDs to gather contributions for")
 	userCmd.PersistentFlags().StringVarP(&duration, "lookback-time", "l", "", "the 'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 	userCmd.PersistentFlags().StringVarP(&referenceDate, "ref-date", "d", "", "reference date for time window (in YYYY-MM-DD format)")
+	userCmd.PersistentFlags().BoolVarP(&completeWeeks, "complete-weeks", "w", false, "output data only for complete weeks (starting Monday)")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
@@ -42,4 +44,5 @@ func init() {
 	viper.BindPFlag("gitHubIdList", userCmd.PersistentFlags().Lookup("github-id-list"))
 	viper.BindPFlag("lookbackTime", userCmd.PersistentFlags().Lookup("lookback-time"))
 	viper.BindPFlag("referenceDate", userCmd.PersistentFlags().Lookup("ref-date"))
+	viper.BindPFlag("completeWeeks", userCmd.PersistentFlags().Lookup("complete-weeks"))
 }
