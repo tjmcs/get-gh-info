@@ -135,10 +135,18 @@ func summaryOfContribs() map[string]interface{} {
 	// and add some summary statistics to the output map
 	for _, gitHubId := range userIdList {
 		userMap := contribByUserSummary[gitHubId].(map[string]interface{})
-		userMap["teamPcntPullReqContribs"] = math.Round(((float64(userMap["pullReqContribs"].(int)))/avgPullReqContribs-1)*10000) / 100
-		userMap["teamPcntReposWithContribPullReqs"] = math.Round(((float64(userMap["reposWithContribPullReqs"].(int)))/avgReposWithContribPullReqs-1)*10000) / 100
-		userMap["teamPcntPullReqReviewContribs"] = math.Round(((float64(userMap["pullReqReviewContribs"].(int)))/avgPullReqReviewContribs-1)*10000) / 100
-		userMap["teamPcntReposWithContribPullReqReviews"] = math.Round(((float64(userMap["reposWithContribPullReqReviews"].(int)))/avgReposWithContribPullReqReviews-1)*10000) / 100
+		if avgPullReqContribs != 0 {
+			userMap["teamPcntPullReqContribs"] = math.Round(((float64(userMap["pullReqContribs"].(int)))/avgPullReqContribs-1)*10000) / 100
+		}
+		if avgReposWithContribPullReqs != 0 {
+			userMap["teamPcntReposWithContribPullReqs"] = math.Round(((float64(userMap["reposWithContribPullReqs"].(int)))/avgReposWithContribPullReqs-1)*10000) / 100
+		}
+		if avgPullReqReviewContribs != 0 {
+			userMap["teamPcntPullReqReviewContribs"] = math.Round(((float64(userMap["pullReqReviewContribs"].(int)))/avgPullReqReviewContribs-1)*10000) / 100
+		}
+		if avgReposWithContribPullReqReviews != 0 {
+			userMap["teamPcntReposWithContribPullReqReviews"] = math.Round(((float64(userMap["reposWithContribPullReqReviews"].(int)))/avgReposWithContribPullReqReviews-1)*10000) / 100
+		}
 	}
 
 	// and return the resulting map
