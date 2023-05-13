@@ -8,6 +8,7 @@ require (
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.0
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
@@ -30,5 +31,4 @@ require (
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/ini.v1 v1.66.2 // indirect
-	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

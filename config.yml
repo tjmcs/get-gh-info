@@ -14,7 +14,7 @@ teams:
   images: [*Adam, *Jeff, *Ryan]
   orbs: [*Kyle, *Brian, *Eric]
   dre: [*Ricardo, *Romain, *Rosie, *Kat]
-  cpe_team: *cpeTeam
+  cpe: *cpeTeam
   junior_members:
     - *Brian
     - *Jeff
@@ -28,7 +28,8 @@ teams:
   tech_writers:
     - *Rosie
     - *Kat
-default_team: cpe_team
+default_team: cpe
+default_repo_mapping: "../cpe-datasets/repositories.yml"
 orgs:
   - circleci
   - CircleCI-Public

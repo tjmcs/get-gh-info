@@ -6,6 +6,7 @@ package utils
 import (
 	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"regexp"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v2"
 )
 
 // define a default lookback time of 90 days
@@ -159,6 +161,199 @@ func GetTeamList(inputTeamName ...string) (string, []map[string]string) {
 		}
 	}
 	return teamName, teamList
+}
+
+/*
+ * a function that can be used to read a generic YAML file
+ */
+
+func ReadYamlFile(fileName string) []map[string]interface{} {
+	// read the contents of the file
+	yfile, err := ioutil.ReadFile(fileName)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: while reading input YAML file '%s'; %s\n", fileName, err)
+		os.Exit(-6)
+	}
+	data := make([]map[interface{}]interface{}, 5)
+	err2 := yaml.Unmarshal(yfile, &data)
+	if err2 != nil {
+		fmt.Fprintf(os.Stderr, "ERROR: while unmarshaling data from input YAML file '%s'; %s\n", fileName, err)
+		os.Exit(-6)
+	}
+	// convert the list of maps of interfaces to interfaces into a list of maps of strings
+	listOfStringMaps := []map[string]interface{}{}
+	for _, item := range data {
+		listOfStringMaps = append(listOfStringMaps, convInterToInterMapToStringToInterMap(item))
+	}
+	return listOfStringMaps
+}
+
+/*
+ * a utility function that finds the smallest index at which val == strSlice[i],
+ * (or -1 if there is no such index)
+ */
+func FindIndexOf(val string, strSlice []string) int {
+	for i, n := range strSlice {
+		if val == n {
+			return i
+		}
+	}
+	return -1
+}
+
+/*
+ * a utility function that can be used to convert a map of interfaces to interfaces to
+ * a map of strings to interfaces
+ */
+func convInterToInterMapToStringToInterMap(inputMap map[interface{}]interface{}) map[string]interface{} {
+	outputMap := map[string]interface{}{}
+	for key, val := range inputMap {
+		outputMap[key.(string)] = val
+	}
+	return outputMap
+}
+
+/*
+ * a function that can be used to extract all of the repositories for a given team
+ * from the "team to repository map"; that file looks something like this:
+ *
+ *   - group: <team name>
+ *     repositories:
+ *       - <repo name>
+ *       - <repo name>
+ *       - <repo name>
+ *       ...
+ *     children:
+ *       - group: <team name>
+ *         repositories:
+ *           - <repo name>
+ *           - <repo name>
+ *           - <repo name>
+ *   - group: <team name>
+ *     repositories:
+ *       - <repo name>
+ *       - <repo name>
+ *       - <repo name>
+ *       ...
+ *
+ * as such, we need to recursively walk the tree in order to find all of the repositories
+ * that might be managed by a given team; what will be returned will be an array of maps,
+ * where each map will contain the following keys:
+ *   - "url": url associated with the repository
+ *	 - "tags": a list of the tags for that repository (used to group repositories together)
+ *
+ */
+func getTeamRepoMappingList(repoMapping []map[string]interface{}, teamName string) []map[string]interface{} {
+	// initialize the list of repository mappings that will be returned
+	repoMappingList := []map[string]interface{}{}
+	// look for the team name in the list of groups at this level
+	for _, group := range repoMapping {
+		groupMap := group
+		if groupMap["group"] == teamName {
+			// if we found the team name, then return the list of all of the repository
+			// mappings that fall under this part of the tree
+			for _, repo := range groupMap["repositories"].([]interface{}) {
+				repoMappingList = append(repoMappingList, convInterToInterMapToStringToInterMap(repo.(map[interface{}]interface{})))
+			}
+			// including the repository mappings for any children of this team
+			if groupMap["children"] != nil {
+				for _, childMap := range groupMap["children"].([]interface{}) {
+					mapAsStringMap := convInterToInterMapToStringToInterMap(childMap.(map[interface{}]interface{}))
+					for key, val := range mapAsStringMap {
+						childTeam := ""
+						if key == "group" {
+							childTeam = val.(string)
+						}
+						// if there is no team name associated with this child, then skip it
+						if childTeam == "" {
+							continue
+						}
+						// and recursively call this function to get the list of repositories
+						// mappings for this child group as well
+						tmpListOfMaps := []map[string]interface{}{mapAsStringMap}
+						subTeamRepoMapping := getTeamRepoMappingList(tmpListOfMaps, childTeam)
+						repoMappingList = append(repoMappingList, subTeamRepoMapping...)
+					}
+				}
+			}
+			// and return the resulting list of repository mappings
+			if len(repoMappingList) > 0 {
+				return repoMappingList
+			}
+		} else if groupMap["children"] != nil {
+			// if the team name for this group doesn't match, then look for it in the children of this group
+			tmpChildren := []map[string]interface{}{}
+			for _, childMap := range groupMap["children"].([]interface{}) {
+				tmpChildren = append(tmpChildren, convInterToInterMapToStringToInterMap(childMap.(map[interface{}]interface{})))
+			}
+			teamRepoMappingList := getTeamRepoMappingList(tmpChildren, teamName)
+			if len(teamRepoMappingList) > 0 {
+				// if we found more entries, add them to our list
+				return append(repoMappingList, teamRepoMappingList...)
+			}
+		}
+	} // and if we get to here, then we didn't find a match in this group, so keep looking
+
+	// finally, if we didn't find anything matching this team name anywhere in the tree
+	// structure we just searched, then return nothing
+	return nil
+}
+
+/*
+ * a function that can be used to retrieve the list of repositories that are
+ * owned by a given team
+ */
+func GetTeamRepos(inputTeamName ...string) []string {
+	// first, get the name of the team we're looking for
+	teamName := ""
+	if len(inputTeamName) > 1 {
+		fmt.Fprintf(os.Stderr, "ERROR: only a single team name can be passed in; received %v\n", inputTeamName)
+		os.Exit(-3)
+	} else if len(inputTeamName) == 1 {
+		teamName = inputTeamName[0]
+	} else {
+		if val := viper.Get("teamName"); val != nil {
+			teamName = val.(string)
+		}
+	}
+	// if we didn't find a team, use the default team name from the configuration (if it exists)
+	if teamName == "" {
+		teamName = viper.GetString("default_team")
+		if teamName == "" {
+			fmt.Fprintf(os.Stderr, "ERROR: team name is a required argument; use the '--team, -t' flag or define a 'default_team' config value\n")
+			os.Exit(-4)
+		}
+	}
+	// next, retrieve the mapping of teams to repositories that was either
+	// passed in on the command-line or read from the configuration file
+	repoMappingFile := viper.Get("repoMapping")
+	if repoMappingFile == nil {
+		// if the repo mapping wasn't passed in on the command-line, and wasn't
+		// included in the configuration file, then use the default repo mapping
+		// (if it exists)
+		repoMappingFile = viper.GetString("default_repo_mapping")
+		if repoMappingFile == "" {
+			// if we still didn't find it, then exit with an error
+			fmt.Fprintf(os.Stderr, "ERROR: unable to find the required 'repoMapping' filename\n")
+			os.Exit(-7)
+		}
+	}
+	// read the repo mapping file into a map of strings to interfaces
+	teamToRepoMap := ReadYamlFile(repoMappingFile.(string))
+	// and extract the list of repositories that are owned by that team from the map
+	teamRepoMapping := getTeamRepoMappingList(teamToRepoMap, teamName)
+	if teamRepoMapping == nil {
+		fmt.Fprintf(os.Stderr, "ERROR: unrecognized team name '%s'; could not retrieve repository mappings\n", teamName)
+		os.Exit(-8)
+	}
+	// flatten out the resulting mappings to get a list of repositories "managed" by this team
+	// or one of its subteams
+	teamRepos := []string{}
+	for _, entry := range teamRepoMapping {
+		splitString := strings.Split(entry["url"].(string), "/")
+		teamRepos = append(teamRepos, strings.Join(splitString[len(splitString)-2:], "/"))
+	}
+	return teamRepos
 }
 
 /*
@@ -357,7 +552,7 @@ func GetQueryTimeWindow() (githubv4.DateTime, githubv4.DateTime) {
  * formatted JSON string
  */
 
-func DumpMapAsJSON(results map[string]interface{}) {
+func DumpMapAsJSON(results interface{}) {
 	// first, get the JSON encoding of the results
 	jsonBytes, err := json.MarshalIndent(results, "", "  ")
 	if err != nil {

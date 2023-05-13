@@ -16,7 +16,7 @@ import (
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	issueOwners      string
+	issueTeam        string
 	getOpenIssuesCmd = &cobra.Command{
 		Use:   "countOpenIssues",
 		Short: "Counts the number of open issues in the named GitHub organization(s)",
@@ -33,7 +33,7 @@ func init() {
 	repoCmd.AddCommand(getOpenIssuesCmd)
 
 	// Here you will define your flags and configuration settings.
-	getOpenIssuesCmd.PersistentFlags().StringVarP(&issueOwners, "team", "t", "", "comma-separated list of team names")
+	getOpenIssuesCmd.PersistentFlags().StringVarP(&issueTeam, "team", "t", "", "team name to use to filter the list of open issues")
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
@@ -42,7 +42,7 @@ func init() {
 	// is called directly, e.g.:
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("teamName", repoCmd.PersistentFlags().Lookup("team"))
+	viper.BindPFlag("teamName", getOpenIssuesCmd.PersistentFlags().Lookup("team"))
 }
 
 /*
@@ -118,6 +118,8 @@ func getOpenIssueCount() map[string]interface{} {
 	// and initialize a map that will be used to store counts for each of the named organizations
 	// and a total count
 	openIssueCountMap := map[string]interface{}{}
+	// next, retrieve the list of repositories that are managed by the team we're looking for
+	repositoryList := utils.GetTeamRepos()
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
 		// initialize a counter for the number of open issues in the current organization
@@ -154,19 +156,22 @@ func getOpenIssueCount() map[string]interface{} {
 				// set firstPage to false so that we'll use the IssueSearchQuery struct
 				// (and it's "after" value) for subsequent queries
 				firstPage = false
-				fmt.Fprintf(os.Stderr, "Found %d issues (of %d in the %s org)\n", len(edges), firstIssueSearchQuery.Search.IssueCount, orgName)
+				fmt.Fprintf(os.Stderr, "Found first %d open issues (of %d in the %s org)\n", len(edges), firstIssueSearchQuery.Search.IssueCount, orgName)
 			} else {
 				edges = issueSearchQuery.Search.Edges
 				pageInfo = issueSearchQuery.Search.PageInfo
-				fmt.Fprintf(os.Stderr, "Found %d issues (of %d in the %s org))\n", len(edges), issueSearchQuery.Search.IssueCount, orgName)
+				fmt.Fprintf(os.Stderr, "Found next %d open issues (of %d in the %s org))\n", len(edges), issueSearchQuery.Search.IssueCount, orgName)
 			}
 			for _, edge := range edges {
-				// if the current repository is managed by the named team, increment the
+				// if the current repository is managed by the team we're interested in, then increment the
 				// open issue count for the current organization
-				//if utils.IsRepoManagedByTeam(edge.Node.Issue.Repository.Name, issueOwners) {
 				if len(edge.Node.Issue.Repository.Name) > 0 {
-					orgOpenIssueCount++
-					openIssueCount++
+					orgAndRepoName := orgName + "/" + edge.Node.Issue.Repository.Name
+					idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
+					if idx > 0 {
+						orgOpenIssueCount++
+						openIssueCount++
+					}
 				}
 			}
 			// if we've reached the end of the list of contributions, break out of the loop
