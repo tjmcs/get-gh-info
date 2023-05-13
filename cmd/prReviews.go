@@ -43,7 +43,7 @@ func init() {
  * pull request reviews performed by a given user to any repository in a given
  * organization
  */
-var PullRequestReviewsPerformedQuery struct {
+var pullRequestReviewsPerformedQuery struct {
 	User struct {
 		Login                   string
 		ContributionsCollection struct {
@@ -99,7 +99,7 @@ func prReviews() map[string]interface{} {
 				// set the "after" field to our current "lastCursof" value
 				vars["after"] = lastCursor
 				// run our query, returning the results in the PullRequestReviewsPerformedQuery struct
-				err := client.Query(context.Background(), &PullRequestReviewsPerformedQuery, vars)
+				err := client.Query(context.Background(), &pullRequestReviewsPerformedQuery, vars)
 				if err != nil {
 					// Handle error.
 					fmt.Fprintln(os.Stderr, err)
@@ -107,7 +107,7 @@ func prReviews() map[string]interface{} {
 				}
 				// grab out the list of edges from the pull request review
 				// contributions made and loop over them
-				edges := PullRequestReviewsPerformedQuery.User.ContributionsCollection.PullRequestReviewContributions.Edges
+				edges := pullRequestReviewsPerformedQuery.User.ContributionsCollection.PullRequestReviewContributions.Edges
 				// if nothing was returned, then we've found all of the contributions
 				// from this user to this organization so break out of the loop
 				if len(edges) == 0 {

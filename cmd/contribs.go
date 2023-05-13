@@ -61,7 +61,7 @@ var ContribQuery struct {
  * define a few types that we'll be using in some of our query structs, first
  * a struct for the contributions made to each repository by a given user
  */
-type ContributionEdges struct {
+type contributionEdges struct {
 	Cursor githubv4.String
 	Node   struct {
 		Repository struct {
@@ -77,13 +77,13 @@ type ContributionEdges struct {
  * and a struct that can be used to put together a list of all of the
  * contributions made by a given user to any repository in a given organization
  */
-var ContributionsMadeQuery struct {
+var contributionsMadeQuery struct {
 	User struct {
 		Login                   string
 		ContributionsCollection struct {
 			CommitContributionsByRepository []struct {
 				Contributions struct {
-					Edges []ContributionEdges
+					Edges []contributionEdges
 				} `graphql:"contributions(first: $first, after: $after)"`
 			} `graphql:"commitContributionsByRepository(maxRepositories: 100)"`
 		} `graphql:"contributionsCollection(from: $from, to: $to, organizationID: $organizationID)"`
@@ -135,7 +135,7 @@ func contribs() map[string]interface{} {
 				// set the "after" field to our current "lastCursof" value
 				vars["after"] = lastCursor
 				// run our query, returning the results in the CommitContributionsMadeQuery struct
-				err := client.Query(context.Background(), &ContributionsMadeQuery, vars)
+				err := client.Query(context.Background(), &contributionsMadeQuery, vars)
 				if err != nil {
 					// Handle error.
 					fmt.Fprintln(os.Stderr, err)
@@ -143,7 +143,7 @@ func contribs() map[string]interface{} {
 				}
 				// grab out the list of edges from the pull request contributions
 				// made and loop over them
-				contribsByRepository := ContributionsMadeQuery.User.ContributionsCollection.CommitContributionsByRepository
+				contribsByRepository := contributionsMadeQuery.User.ContributionsCollection.CommitContributionsByRepository
 				if len(contribsByRepository) == 0 {
 					break
 				}

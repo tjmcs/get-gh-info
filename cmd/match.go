@@ -48,7 +48,7 @@ func init() {
  * define a struct that can be used to put together a list of all of the
  * repositories in a given organization (by name) that match a given query
  */
-var RepositorySearchQuery struct {
+var repositorySearchQuery struct {
 	Search struct {
 		RepositoryCount int
 		Edges           []struct {
@@ -91,7 +91,7 @@ func repoList() map[string]interface{} {
 		}
 		// run our query and add the data we want from the query results to the
 		// repositoryList map
-		err := client.Query(context.Background(), &RepositorySearchQuery, vars)
+		err := client.Query(context.Background(), &repositorySearchQuery, vars)
 		if err != nil {
 			// Handle error.
 			fmt.Fprintf(os.Stderr, "ERR: %v\n", err)
@@ -99,7 +99,7 @@ func repoList() map[string]interface{} {
 		}
 		// grab out the list of edges from the pull request review
 		// contributions made and loop over them
-		edges := RepositorySearchQuery.Search.Edges
+		edges := repositorySearchQuery.Search.Edges
 		fmt.Fprintf(os.Stderr, "Found %d repositories matching the pattern '%s' in '%s' orgization\n", len(edges), searchPattern, orgName)
 		for _, edge := range edges {
 			// if here, then we haven't seen this repository yet so create a new entry for it

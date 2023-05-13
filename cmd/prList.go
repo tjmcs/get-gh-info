@@ -44,7 +44,7 @@ func init() {
  * then a struct that can be used put together a list of all of the commits
  * included in a pull request
  */
-type CommitEdges struct {
+type commitEdges struct {
 	Node struct {
 		Commit struct {
 			Author struct {
@@ -79,7 +79,7 @@ type PullRequestEdges struct {
 			Closed   bool
 			ClosedAt githubv4.DateTime
 			Commits  struct {
-				Edges []CommitEdges
+				Edges []commitEdges
 			} `graphql:"commits(first: 1)"`
 			CreatedAt  githubv4.DateTime
 			Merged     bool
@@ -98,7 +98,7 @@ type PullRequestEdges struct {
  * and a struct that can be used to put together a list of all of the pull
  * requests made by a given user to any repository in a given organization
  */
-var PullRequestsMadeQuery struct {
+var pullRequestsMadeQuery struct {
 	User struct {
 		Login                   string
 		ContributionsCollection struct {
@@ -154,7 +154,7 @@ func prList() map[string]interface{} {
 				// set the "after" field to our current "lastCursof" value
 				vars["after"] = lastCursor
 				// run our query, returning the results in the PullRequestsMadeQuery struct
-				err := client.Query(context.Background(), &PullRequestsMadeQuery, vars)
+				err := client.Query(context.Background(), &pullRequestsMadeQuery, vars)
 				if err != nil {
 					// Handle error.
 					fmt.Fprintln(os.Stderr, err)
@@ -162,7 +162,7 @@ func prList() map[string]interface{} {
 				}
 				// grab out the list of edges from the pull request contributions
 				// made and loop over them
-				edges := PullRequestsMadeQuery.User.ContributionsCollection.PullRequestContributions.Edges
+				edges := pullRequestsMadeQuery.User.ContributionsCollection.PullRequestContributions.Edges
 				// if nothing was returned, then we've found all of the contributions
 				// from this user to this organization so break out of the loop
 				if len(edges) == 0 {
