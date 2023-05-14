@@ -10,13 +10,11 @@ import (
 
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	issueTeam        string
 	getOpenIssuesCmd = &cobra.Command{
 		Use:   "countOpenIssues",
 		Short: "Counts the number of open issues in the named GitHub organization(s)",
@@ -33,7 +31,6 @@ func init() {
 	repoCmd.AddCommand(getOpenIssuesCmd)
 
 	// Here you will define your flags and configuration settings.
-	getOpenIssuesCmd.PersistentFlags().StringVarP(&issueTeam, "team", "t", "", "team name to use to filter the list of open issues")
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
@@ -42,7 +39,6 @@ func init() {
 	// is called directly, e.g.:
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("teamName", getOpenIssuesCmd.PersistentFlags().Lookup("team"))
 }
 
 /*
@@ -71,14 +67,10 @@ type issueSearchEdges []struct {
 		} `graphql:"... on Issue"`
 	}
 }
-type issuePageInfo struct {
-	EndCursor   githubv4.String
-	HasNextPage bool
-}
 type issueSearchBody struct {
 	IssueCount githubv4.Int
 	Edges      issueSearchEdges
-	PageInfo   issuePageInfo
+	PageInfo   PageInfo
 }
 
 /*
@@ -119,7 +111,7 @@ func getOpenIssueCount() map[string]interface{} {
 	// and a total count
 	openIssueCountMap := map[string]interface{}{}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
-	repositoryList := utils.GetTeamRepos()
+	_, repositoryList := utils.GetTeamRepos()
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
 		// initialize a counter for the number of open issues in the current organization
@@ -131,7 +123,7 @@ func getOpenIssueCount() map[string]interface{} {
 		// and a few other variables that we'll use to query the system for results
 		var err error
 		var edges issueSearchEdges
-		var pageInfo issuePageInfo
+		var pageInfo PageInfo
 		// loop over the pages of results until we've reached the end of the list of open
 		// issues for this organization
 		for {
@@ -153,7 +145,7 @@ func getOpenIssueCount() map[string]interface{} {
 			if firstPage {
 				edges = firstIssueSearchQuery.Search.Edges
 				pageInfo = firstIssueSearchQuery.Search.PageInfo
-				// set firstPage to false so that we'll use the IssueSearchQuery struct
+				// set firstPage to false so that we'll use the issueSearchQuery struct
 				// (and it's "after" value) for subsequent queries
 				firstPage = false
 				fmt.Fprintf(os.Stderr, "Found first %d open issues (of %d in the %s org)\n", len(edges), firstIssueSearchQuery.Search.IssueCount, orgName)

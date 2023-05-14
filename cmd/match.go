@@ -32,10 +32,10 @@ func init() {
 	repoCmd.AddCommand(matchCmd)
 
 	// Here you will define your flags and configuration settings.
-	matchCmd.PersistentFlags().StringVarP(&searchPattern, "search-pattern", "p", "", "pattern to match against repository names")
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
+	matchCmd.PersistentFlags().StringVarP(&searchPattern, "search-pattern", "p", "", "pattern to match against repository names")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:

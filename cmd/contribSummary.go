@@ -12,13 +12,11 @@ import (
 	mapset "github.com/deckarep/golang-set"
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	compTeam          string
 	contribSummaryCmd = &cobra.Command{
 		Use:   "contribSummary",
 		Short: "Generates a summary (including statistics) of contributions",
@@ -35,7 +33,6 @@ func init() {
 	userCmd.AddCommand(contribSummaryCmd)
 
 	// Here you will define your flags and configuration settings.
-	contribSummaryCmd.PersistentFlags().StringVarP(&compTeam, "team", "t", "", "name of team to compare contributions against")
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
@@ -44,7 +41,6 @@ func init() {
 	// is called directly, e.g.:
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("teamName", contribSummaryCmd.PersistentFlags().Lookup("team"))
 }
 
 /*
@@ -61,7 +57,7 @@ func summaryOfContribs() map[string]interface{} {
 	// define a few lists that we'll use later on (to loop over the team members and
 	// to skip some members when calculating statistics)
 	userIdList := utils.GetUserIdList()
-	_, teamList := utils.GetTeamList()
+	_, teamList := utils.GetTeamMembers()
 	// construct the list of GitHub IDs to gather information for
 	mySet := mapset.NewSet()
 	for _, user := range userIdList {
