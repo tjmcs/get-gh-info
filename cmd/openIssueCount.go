@@ -51,6 +51,8 @@ type issueSearchEdges []struct {
 		Issue struct {
 			CreatedAt  githubv4.DateTime
 			UpdatedAt  githubv4.DateTime
+			Closed     bool
+			ClosedAt   githubv4.DateTime
 			Title      string
 			Url        string
 			Repository struct {
@@ -111,73 +113,106 @@ func getOpenIssueCount() map[string]interface{} {
 	// and a total count
 	openIssueCountMap := map[string]interface{}{}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
-	_, repositoryList := utils.GetTeamRepos()
+	teamName, repositoryList := utils.GetTeamRepos()
+	// define the start and end time of our query window
+	startDateTime, endDateTime := utils.GetQueryTimeWindow()
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
 		// initialize a counter for the number of open issues in the current organization
-		orgOpenIssueCount := 0
-		// construct our query string and add it ot the vars map
-		vars["query"] = githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog", orgName))
-		// of results for each organization (or not)
-		firstPage := true
-		// and a few other variables that we'll use to query the system for results
-		var err error
-		var edges issueSearchEdges
-		var pageInfo PageInfo
-		// loop over the pages of results until we've reached the end of the list of open
-		// issues for this organization
-		for {
-			// set the "after" field to our current "lastCursor" value
-			// run our query and add the data we want from the query results to the
-			// repositoryList map
-			if firstPage {
-				err = client.Query(context.Background(), &firstIssueSearchQuery, vars)
-			} else {
-				err = client.Query(context.Background(), &issueSearchQuery, vars)
-			}
-			if err != nil {
-				// Handle error.
-				fmt.Fprintf(os.Stderr, "ERR: %v\n", err)
-				os.Exit(1)
-			}
-			// grab out the list of edges and the page info from the results of our search
-			// and loop over the edges
-			if firstPage {
-				edges = firstIssueSearchQuery.Search.Edges
-				pageInfo = firstIssueSearchQuery.Search.PageInfo
-				// set firstPage to false so that we'll use the issueSearchQuery struct
-				// (and it's "after" value) for subsequent queries
-				firstPage = false
-				fmt.Fprintf(os.Stderr, "Found first %d open issues (of %d in the %s org)\n", len(edges), firstIssueSearchQuery.Search.IssueCount, orgName)
-			} else {
-				edges = issueSearchQuery.Search.Edges
-				pageInfo = issueSearchQuery.Search.PageInfo
-				fmt.Fprintf(os.Stderr, "Found next %d open issues (of %d in the %s org))\n", len(edges), issueSearchQuery.Search.IssueCount, orgName)
-			}
-			for _, edge := range edges {
-				// if the current repository is managed by the team we're interested in, then increment the
-				// open issue count for the current organization
-				if len(edge.Node.Issue.Repository.Name) > 0 {
-					orgAndRepoName := orgName + "/" + edge.Node.Issue.Repository.Name
-					idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
-					if idx > 0 {
+		orgOpenIssueCount := 0 // define a couple of queries to run for each organization; the first is used to query
+		// for open issues and the second is used to query for closed issues that were closed
+		// after the end of our query window
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog", orgName))
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog closed:>%s", orgName, endDateTime.Format("2006-01-02")))
+		queries := map[string]githubv4.String{
+			"open":   openQuery,
+			"closed": closedQuery,
+		}
+		// loop over the queries that we want to run for this organization, gathering
+		// the results for each query
+		for queryType, query := range queries {
+			// add the query string to use with this query to the vars map
+			vars["query"] = query
+			// of results for each organization (or not)
+			firstPage := true
+			// and a few other variables that we'll use to query the system for results
+			var err error
+			var edges issueSearchEdges
+			var pageInfo PageInfo
+			// loop over the pages of results until we've reached the end of the list of open
+			// issues for this organization
+			for {
+				// set the "after" field to our current "lastCursor" value
+				// run our query and add the data we want from the query results to the
+				// repositoryList map
+				if firstPage {
+					err = client.Query(context.Background(), &firstIssueSearchQuery, vars)
+				} else {
+					err = client.Query(context.Background(), &issueSearchQuery, vars)
+				}
+				if err != nil {
+					// Handle error.
+					fmt.Fprintf(os.Stderr, "ERR: %v\n", err)
+					os.Exit(1)
+				}
+				// grab out the list of edges and the page info from the results of our search
+				// and loop over the edges
+				if firstPage {
+					edges = firstIssueSearchQuery.Search.Edges
+					pageInfo = firstIssueSearchQuery.Search.PageInfo
+					// set firstPage to false so that we'll use the issueSearchQuery struct
+					// (and it's "after" value) for subsequent queries
+					firstPage = false
+					fmt.Fprintf(os.Stderr, ".")
+				} else {
+					edges = issueSearchQuery.Search.Edges
+					pageInfo = issueSearchQuery.Search.PageInfo
+					fmt.Fprintf(os.Stderr, ".")
+				}
+				for _, edge := range edges {
+					// if the current repository is managed by the team we're interested in, then increment the
+					// open issue count for the current organization
+					if len(edge.Node.Issue.Repository.Name) > 0 {
+						orgAndRepoName := orgName + "/" + edge.Node.Issue.Repository.Name
+						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
+						// if the current repository is not managed by the team we're interested in, skip it
+						if idx < 0 {
+							continue
+						}
+						// save the current issue's creation time
+						issueCreatedAt := edge.Node.Issue.CreatedAt
+						// if the issue was created after the end of our query window, then skip it
+						if issueCreatedAt.After(endDateTime.Time) {
+							continue
+						}
+						// if this is a closed issue and it was closed before the start of our query window,
+						// then skip it
+						if queryType == "closed" {
+							if edge.Node.Issue.ClosedAt.Before(startDateTime.Time) {
+								continue
+							}
+						}
 						orgOpenIssueCount++
 						openIssueCount++
 					}
 				}
+				// if we've reached the end of the list of contributions, break out of the loop
+				if !pageInfo.HasNextPage {
+					break
+				}
+				vars["after"] = pageInfo.EndCursor
 			}
-			// if we've reached the end of the list of contributions, break out of the loop
-			if !pageInfo.HasNextPage {
-				break
-			}
-			vars["after"] = pageInfo.EndCursor
-		}
+			// and unset the "after" key in the vars map so that we're ready
+			// for the next query
+			delete(vars, "after")
+		} // end of loop over queries
+
 		// add the open issue count for the current organization to the openIssueCountMap
 		openIssueCountMap[orgName] = orgOpenIssueCount
-		// and reset a couple of things to prepare for the next organization
-		delete(vars, "after")
 	}
 	// add the total open issue count to the openIssueCountMap
 	openIssueCountMap["total"] = openIssueCount
+	fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team before %s\n", openIssueCount,
+		teamName, endDateTime.Format("2006-01-02"))
 	return openIssueCountMap
 }

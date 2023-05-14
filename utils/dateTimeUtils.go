@@ -128,11 +128,18 @@ func GetQueryTimeWindow() (githubv4.DateTime, githubv4.DateTime) {
 		// ahead rather than looking back and we need to shift the reference date one
 		// more week into the future to only include complete weeks in our queries
 		if (lookBackStr != "" && lookBackDuration < 0) || (lookBackStr == "" && referenceDate != "") {
-			refDateTime = refDateTime.Add(7 * 24 * time.Hour)
+			// if the offset between the weekday for the input date and the previous
+			// (i.e. the start of the week) in days is not zero, then we need to shift
+			// the reference date forward by one day so that the lookback logic will work
+			// for a look ahead time window
+			offset := (int(time.Monday) - int(refDateTime.Weekday()) - 7) % 7
+			if offset != 0 {
+				refDateTime = refDateTime.Add(7 * 24 * time.Hour)
+			}
 		}
 		// now, shift the reference date to the start of the week we're interested in
 		refDateTime = weekStartDate(refDateTime)
-		fmt.Fprintf(os.Stderr, "WARNING: only complete weeks requested, reference date set to '%s'\n", refDateTime.Format("2006-01-02"))
+		fmt.Fprintf(os.Stderr, "WARN: only complete weeks requested, reference date set to '%s'\n", refDateTime.Format("2006-01-02"))
 	}
 	// now that we have the reference date set appropriately, use that and the lookback
 	// time (if it was set) to setup our time window
@@ -147,18 +154,21 @@ func GetQueryTimeWindow() (githubv4.DateTime, githubv4.DateTime) {
 				// since it's an end date for the window, we just need to truncate so that we only
 				// see data from complete weeks in our output
 				refDateTime = weekStartDate(refDateTime)
-				fmt.Fprintf(os.Stderr, "WARNING: only complete weeks requested, end date set to '%s'\n", refDateTime.Format("2006-01-02"))
+				fmt.Fprintf(os.Stderr, "WARN: only complete weeks requested, end date set to '%s'\n", refDateTime.Format("2006-01-02"))
 			}
 		} else {
 			// otherwise, subtract the lookback time from the reference date time to get the
 			// start of our query window
 			startDateTime = refDateTime.Add(-lookBackDuration)
 			if showCompleteWeeksOnly {
-				// since it's a start date for the window, we need to shift by a week and
-				// truncate to the start of the week to ensure we only get complete weeks
-				// in our output data
-				startDateTime = weekStartDate(startDateTime.Add(7 * 24 * time.Hour))
-				fmt.Fprintf(os.Stderr, "WARNING: only complete weeks requested, start date set to '%s'\n", startDateTime.Format("2006-01-02"))
+				// if the start date is not the start of the week, then we need to shift
+				// by a week and truncate to the start of the week to ensure we only get
+				// complete weeks in our output data
+				offset := (int(time.Monday) - int(startDateTime.Weekday()) - 7) % 7
+				if offset != 0 {
+					startDateTime = weekStartDate(startDateTime.Add(7 * 24 * time.Hour))
+					fmt.Fprintf(os.Stderr, "WARN: only complete weeks requested, start date set to '%s'\n", startDateTime.Format("2006-01-02"))
+				}
 			}
 		}
 		endDateTime = refDateTime
@@ -173,20 +183,20 @@ func GetQueryTimeWindow() (githubv4.DateTime, githubv4.DateTime) {
 				// since it's an end date for the window, we just need to truncate so that we only
 				// see data from complete weeks in our output
 				endDateTime = weekStartDate(endDateTime)
-				fmt.Fprintf(os.Stderr, "WARNING: only complete weeks requested, end date set to '%s'\n", endDateTime.Format("2006-01-02"))
+				fmt.Fprintf(os.Stderr, "WARN: only complete weeks requested, end date set to '%s'\n", endDateTime.Format("2006-01-02"))
 			}
-			fmt.Fprintf(os.Stderr, "WARNING: no lookback time specified; using reference date as start of time window\n")
+			fmt.Fprintf(os.Stderr, "WARN: no lookback time specified; using reference date as start of time window\n")
 		} else {
 			// otherwise, if neither a lookback time nor a reference time was specified, then
 			// assume a default lookback time of 90 days from the current date time
-			fmt.Fprintf(os.Stderr, "WARNING: no lookback time or reference date specified; using default lookback time of 90 days\n")
+			fmt.Fprintf(os.Stderr, "WARN: no lookback time or reference date specified; using default lookback time of 90 days\n")
 			startDateTime = refDateTime.Add(-defaultLookbackDays * 24 * time.Hour)
 			if showCompleteWeeksOnly {
 				// since it's a start date for the window, we need to shift by a week and
 				// truncate to the start of the week to ensure we only get complete weeks
 				// in our output data
 				startDateTime = weekStartDate(startDateTime.Add(7 * 24 * time.Hour))
-				fmt.Fprintf(os.Stderr, "WARNING: only complete weeks requested, start date set to '%s'\n", startDateTime.Format("2006-01-02"))
+				fmt.Fprintf(os.Stderr, "WARN: only complete weeks requested, start date set to '%s'\n", startDateTime.Format("2006-01-02"))
 			}
 			endDateTime = refDateTime
 		}
@@ -199,8 +209,9 @@ func GetQueryTimeWindow() (githubv4.DateTime, githubv4.DateTime) {
 		os.Exit(-1)
 	} else if endDateTime.After(currentDateTime) {
 		// if the end time for our query window is in the future, then we should warn the user
-		fmt.Fprintf(os.Stderr, "WARNING: defined end date for query window is in the future; results only cover %s through %s\n", startDateTime.Format("2006-01-02"), currentDateTime.Format("2006-01-02"))
+		fmt.Fprintf(os.Stderr, "WARN: defined end date for query window is in the future; results only cover %s through %s\n", startDateTime.Format("2006-01-02"), currentDateTime.Format("2006-01-02"))
 	}
+	fmt.Fprintf(os.Stderr, "INFO: time window for query is %s through %s\n", startDateTime.Format("2006-01-02"), endDateTime.Format("2006-01-02"))
 	// otherwise, return the start and end date times for our query window
 	return githubv4.DateTime{startDateTime}, githubv4.DateTime{refDateTime}
 }

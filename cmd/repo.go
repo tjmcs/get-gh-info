@@ -35,11 +35,17 @@ func init() {
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	rootCmd.PersistentFlags().StringVarP(&compTeam, "team", "t", "", "name of team to compare contributions against")
+	rootCmd.PersistentFlags().StringVarP(&compTeam, "team", "t", "", "name of team to gather data for")
+	rootCmd.PersistentFlags().StringVarP(&duration, "lookback-time", "l", "", "the 'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
+	rootCmd.PersistentFlags().StringVarP(&referenceDate, "ref-date", "d", "", "reference date for time window (in YYYY-MM-DD format)")
+	rootCmd.PersistentFlags().BoolVarP(&completeWeeks, "complete-weeks", "w", false, "output data only for complete weeks (starting Monday)")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
 	viper.BindPFlag("teamName", rootCmd.PersistentFlags().Lookup("team"))
+	viper.BindPFlag("lookbackTime", rootCmd.PersistentFlags().Lookup("lookback-time"))
+	viper.BindPFlag("referenceDate", rootCmd.PersistentFlags().Lookup("ref-date"))
+	viper.BindPFlag("completeWeeks", rootCmd.PersistentFlags().Lookup("complete-weeks"))
 }
