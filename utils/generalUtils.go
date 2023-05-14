@@ -102,3 +102,38 @@ func DumpMapAsJSON(results interface{}) {
 	// then, print the results to stdout
 	fmt.Println(string(jsonBytes))
 }
+
+/*
+ * defind a type that lets us dump out a time.Duration as a
+ * formatted string in JSON
+ */
+type JsonDuration struct {
+	time.Duration
+}
+
+func (j JsonDuration) format() string {
+	d := j.Duration
+	if d >= (time.Hour * 24) {
+		return fmt.Sprintf("%.2fd", d.Hours()/24)
+	} else if d >= time.Hour {
+		return fmt.Sprintf("%.2fh", d.Hours())
+	} else if d >= time.Minute {
+		return fmt.Sprintf("%.2fm", d.Minutes())
+	} else if d >= time.Second {
+		return fmt.Sprintf("%.2fh", d.Seconds())
+	} else if d >= time.Millisecond {
+		return fmt.Sprintf("%dms", d.Round(time.Millisecond))
+	} else if d >= time.Microsecond {
+		return fmt.Sprintf("%dus", d.Round(time.Microsecond))
+	}
+	// else, if we get here, just return the number of nanoseconds
+	return fmt.Sprintf("%dns", d.Nanoseconds())
+}
+
+func (j JsonDuration) MarshalText() ([]byte, error) {
+	return []byte(j.format()), nil
+}
+
+func (j JsonDuration) MarshalJSON() ([]byte, error) {
+	return []byte(`"` + j.format() + `"`), nil
+}
