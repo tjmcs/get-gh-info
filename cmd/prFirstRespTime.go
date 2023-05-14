@@ -45,61 +45,6 @@ func init() {
 }
 
 /*
- * Define a pair of types that we can use to define (ane extract data from) the body of the GraphQL
- * query that will be used to retrieve the list of open PRs in the named GitHub organization(s)
- */
-type prRespTimeSearchEdges []struct {
-	Cursor githubv4.String
-	Node   struct {
-		PullRequest struct {
-			CreatedAt  githubv4.DateTime
-			UpdatedAt  githubv4.DateTime
-			Closed     bool
-			ClosedAt   githubv4.DateTime
-			Title      string
-			Url        string
-			Repository struct {
-				Name string
-				Url  string
-			}
-			Comments struct {
-				Nodes []struct {
-					CreatedAt githubv4.DateTime
-					UpdatedAt githubv4.DateTime
-					Author    struct {
-						Login string
-					}
-					Body string
-				}
-			} `graphql:"comments(first: 100, orderBy: {field: UPDATED_AT, direction: ASC})"`
-		} `graphql:"... on PullRequest"`
-	}
-}
-type prRespTimeSearchBody struct {
-	IssueCount githubv4.Int
-	Edges      prRespTimeSearchEdges
-	PageInfo   PageInfo
-}
-
-/*
- * define a pair of structs that can be used to query GitHub for a list of all of the
- * open PRs in a given organization (by name) that match a given query; the first is
- * used to query for the first page of results and the second is used to query for
- * subsequent pages of results
- */
-var firstPrRespTimeSearchQuery struct {
-	Search struct {
-		prRespTimeSearchBody
-	} `graphql:"search(first: $first, query: $query, type: $type)"`
-}
-
-var prRespTimeSearchQuery struct {
-	Search struct {
-		prRespTimeSearchBody
-	} `graphql:"search(first: $first, after: $after, query: $query, type: $type)"`
-}
-
-/*
  * define the function that is used to calculate the statistics associated with
  * the "time to first response" for any open PRs in the named GitHub organization(s);
  * note that this function skips open PRs that include the 'backlog' label and only
@@ -145,7 +90,7 @@ func getPrFirstRespTimeStats() map[string]utils.JsonDuration {
 			firstPage := true
 			// and a few other variables that we'll use to query the system for results
 			var err error
-			var edges prRespTimeSearchEdges
+			var edges prSearchEdges
 			var pageInfo PageInfo
 			// loop over the pages of results from this query until we've reached the end
 			// of the list of PRs that matched
@@ -153,9 +98,9 @@ func getPrFirstRespTimeStats() map[string]utils.JsonDuration {
 				// run our query and add the data we want from the query results to the
 				// repositoryList map
 				if firstPage {
-					err = client.Query(context.Background(), &firstPrRespTimeSearchQuery, vars)
+					err = client.Query(context.Background(), &firstPrSearchQuery, vars)
 				} else {
-					err = client.Query(context.Background(), &prRespTimeSearchQuery, vars)
+					err = client.Query(context.Background(), &prSearchQuery, vars)
 				}
 				if err != nil {
 					// Handle error.
@@ -165,15 +110,15 @@ func getPrFirstRespTimeStats() map[string]utils.JsonDuration {
 				// grab out the list of edges and the page info from the results of our search
 				// and loop over the edges
 				if firstPage {
-					edges = firstPrRespTimeSearchQuery.Search.Edges
-					pageInfo = firstPrRespTimeSearchQuery.Search.PageInfo
-					// set firstPage to false so that we'll use the initRespTimeSearchQuery struct
+					edges = firstPrSearchQuery.Search.Edges
+					pageInfo = firstPrSearchQuery.Search.PageInfo
+					// set firstPage to false so that we'll use the prSearchQuery struct
 					// (and it's "after" value) for subsequent queries
 					firstPage = false
 					fmt.Fprintf(os.Stderr, ".")
 				} else {
-					edges = prRespTimeSearchQuery.Search.Edges
-					pageInfo = prRespTimeSearchQuery.Search.PageInfo
+					edges = prSearchQuery.Search.Edges
+					pageInfo = prSearchQuery.Search.PageInfo
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {

@@ -66,6 +66,16 @@ type prSearchEdges []struct {
 					}
 				}
 			} `graphql:"assignees(first: 10)"`
+			Comments struct {
+				Nodes []struct {
+					CreatedAt githubv4.DateTime
+					UpdatedAt githubv4.DateTime
+					Author    struct {
+						Login string
+					}
+					Body string
+				}
+			} `graphql:"comments(first: 100, orderBy: {field: UPDATED_AT, direction: ASC})"`
 		} `graphql:"... on PullRequest"`
 	}
 }
