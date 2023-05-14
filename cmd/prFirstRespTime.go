@@ -17,21 +17,21 @@ import (
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	getFirstResponseTimeStatsCmd = &cobra.Command{
-		Use:   "firstResponseTime",
-		Short: "Calculates statistics for the time to first response",
+	getPrFirstRespTimeStatsCmd = &cobra.Command{
+		Use:   "prFirstRespTime",
+		Short: "Calculates statistics for the time to first response of open isues",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
-and maximum time to first response for all open issues in the named GitHub
-(skilling any issues that include the 'backlog' label and only counting the
-issues in repositories that are managed by the named team.`,
+and maximum time to first response for all open PRs in the named GitHub
+(skipping any PRs that include the 'backlog' label and only counting the
+PRs in repositories that are managed by the named team.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			utils.DumpMapAsJSON(getFirstRespTimeStats())
+			utils.DumpMapAsJSON(getPrFirstRespTimeStats())
 		},
 	}
 )
 
 func init() {
-	repoCmd.AddCommand(getFirstResponseTimeStatsCmd)
+	repoCmd.AddCommand(getPrFirstRespTimeStatsCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -46,12 +46,12 @@ func init() {
 
 /*
  * Define a pair of types that we can use to define (ane extract data from) the body of the GraphQL
- * query that will be used to retrieve the list of open issues in the named GitHub organization(s)
+ * query that will be used to retrieve the list of open PRs in the named GitHub organization(s)
  */
-type issueRespTimeSearchEdges []struct {
+type prRespTimeSearchEdges []struct {
 	Cursor githubv4.String
 	Node   struct {
-		Issue struct {
+		PullRequest struct {
 			CreatedAt  githubv4.DateTime
 			UpdatedAt  githubv4.DateTime
 			Closed     bool
@@ -72,41 +72,41 @@ type issueRespTimeSearchEdges []struct {
 					Body string
 				}
 			} `graphql:"comments(first: 100, orderBy: {field: UPDATED_AT, direction: ASC})"`
-		} `graphql:"... on Issue"`
+		} `graphql:"... on PullRequest"`
 	}
 }
-type issueRespTimeSearchBody struct {
+type prRespTimeSearchBody struct {
 	IssueCount githubv4.Int
-	Edges      issueRespTimeSearchEdges
+	Edges      prRespTimeSearchEdges
 	PageInfo   PageInfo
 }
 
 /*
  * define a pair of structs that can be used to query GitHub for a list of all of the
- * open issues in a given organization (by name) that match a given query; the first is
+ * open PRs in a given organization (by name) that match a given query; the first is
  * used to query for the first page of results and the second is used to query for
  * subsequent pages of results
  */
-var firstIssueRespTimeSearchQuery struct {
+var firstPrRespTimeSearchQuery struct {
 	Search struct {
-		issueRespTimeSearchBody
+		prRespTimeSearchBody
 	} `graphql:"search(first: $first, query: $query, type: $type)"`
 }
 
-var issueRespTimeSearchQuery struct {
+var prRespTimeSearchQuery struct {
 	Search struct {
-		issueRespTimeSearchBody
+		prRespTimeSearchBody
 	} `graphql:"search(first: $first, after: $after, query: $query, type: $type)"`
 }
 
 /*
  * define the function that is used to calculate the statistics associated with
- * the "time to first response" for any open issues in the named GitHub organization(s);
- * note that this function skips open issues that include the 'backlog' label and only
- * includes first response times for issues in repositories that are managed by the
+ * the "time to first response" for any open PRs in the named GitHub organization(s);
+ * note that this function skips open PRs that include the 'backlog' label and only
+ * includes first response times for PRs in repositories that are managed by the
  * named team(s)
  */
-func getFirstRespTimeStats() map[string]utils.JsonDuration {
+func getPrFirstRespTimeStats() map[string]utils.JsonDuration {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// initialize the vars map that we'll use when making our query for PR review contributions
@@ -127,10 +127,10 @@ func getFirstRespTimeStats() map[string]utils.JsonDuration {
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
 		// define a couple of queries to run for each organization; the first is used to query
-		// for open issues and the second is used to query for closed issues that were closed
+		// for open PRs and the second is used to query for closed PRs that were closed
 		// after the end of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog", orgName))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog closed:>%s", orgName, endDateTime.Format("2006-01-02")))
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog", orgName))
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog closed:>%s", orgName, endDateTime.Format("2006-01-02")))
 		queries := map[string]githubv4.String{
 			"open":   openQuery,
 			"closed": closedQuery,
@@ -145,17 +145,17 @@ func getFirstRespTimeStats() map[string]utils.JsonDuration {
 			firstPage := true
 			// and a few other variables that we'll use to query the system for results
 			var err error
-			var edges issueRespTimeSearchEdges
+			var edges prRespTimeSearchEdges
 			var pageInfo PageInfo
 			// loop over the pages of results from this query until we've reached the end
-			// of the list of issues that matched
+			// of the list of PRs that matched
 			for {
 				// run our query and add the data we want from the query results to the
 				// repositoryList map
 				if firstPage {
-					err = client.Query(context.Background(), &firstIssueRespTimeSearchQuery, vars)
+					err = client.Query(context.Background(), &firstPrRespTimeSearchQuery, vars)
 				} else {
-					err = client.Query(context.Background(), &issueRespTimeSearchQuery, vars)
+					err = client.Query(context.Background(), &prRespTimeSearchQuery, vars)
 				}
 				if err != nil {
 					// Handle error.
@@ -165,52 +165,52 @@ func getFirstRespTimeStats() map[string]utils.JsonDuration {
 				// grab out the list of edges and the page info from the results of our search
 				// and loop over the edges
 				if firstPage {
-					edges = firstIssueRespTimeSearchQuery.Search.Edges
-					pageInfo = firstIssueRespTimeSearchQuery.Search.PageInfo
+					edges = firstPrRespTimeSearchQuery.Search.Edges
+					pageInfo = firstPrRespTimeSearchQuery.Search.PageInfo
 					// set firstPage to false so that we'll use the initRespTimeSearchQuery struct
 					// (and it's "after" value) for subsequent queries
 					firstPage = false
 					fmt.Fprintf(os.Stderr, ".")
 				} else {
-					edges = issueRespTimeSearchQuery.Search.Edges
-					pageInfo = issueRespTimeSearchQuery.Search.PageInfo
+					edges = prRespTimeSearchQuery.Search.Edges
+					pageInfo = prRespTimeSearchQuery.Search.PageInfo
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
 					// if the current repository is managed by the team we're interested in, search for the first
 					// response from a member of the team and use the time of that response to calculate the time
-					// to first response value for this issue
-					if len(edge.Node.Issue.Repository.Name) > 0 {
-						orgAndRepoName := orgName + "/" + edge.Node.Issue.Repository.Name
+					// to first response value for this PR
+					if len(edge.Node.PullRequest.Repository.Name) > 0 {
+						orgAndRepoName := orgName + "/" + edge.Node.PullRequest.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
 						// if the current repository is not managed by the team we're interested in, skip it
 						if idx < 0 {
 							continue
 						}
-						// save the current issue's creation time
-						issueCreatedAt := edge.Node.Issue.CreatedAt
-						// if the issue was created after the end of our query window, then skip it
-						if issueCreatedAt.After(endDateTime.Time) {
+						// save the current PR's creation time
+						prCreatedAt := edge.Node.PullRequest.CreatedAt
+						// if the PR was created after the end of our query window, then skip it
+						if prCreatedAt.After(endDateTime.Time) {
 							continue
 						}
-						// if this is a query for closed issues and the issue was closed before the start of
+						// if this is a query for closed PRs and the PR was closed before the start of
 						// our query window, then skip it
 						if queryType == "closed" {
-							if edge.Node.Issue.ClosedAt.Before(startDateTime.Time) {
+							if edge.Node.PullRequest.ClosedAt.Before(startDateTime.Time) {
 								continue
 							}
 						}
-						// if no comments were found for this issue, then use the end of our query window
+						// if no comments were found for this PR, then use the end of our query window
 						// to determine the time to first response
-						if len(edge.Node.Issue.Comments.Nodes) == 0 {
-							firstRespTimeList = append(firstRespTimeList, endDateTime.Time.Sub(issueCreatedAt.Time))
+						if len(edge.Node.PullRequest.Comments.Nodes) == 0 {
+							firstRespTimeList = append(firstRespTimeList, endDateTime.Time.Sub(prCreatedAt.Time))
 							continue
 						}
 						// if we got this far, then the current repository is managed by the team we're interested in,
 						// so look for the first response from a member of the team; first, initialize a variable to
-						// hold the difference between the end of our query window and the creation time for this issue
-						firstRespTime := endDateTime.Time.Sub(issueCreatedAt.Time)
-						for _, comment := range edge.Node.Issue.Comments.Nodes {
+						// hold the difference between the end of our query window and the creation time for this PR
+						firstRespTime := endDateTime.Time.Sub(prCreatedAt.Time)
+						for _, comment := range edge.Node.PullRequest.Comments.Nodes {
 							// if the comment has an author (it should)
 							if len(comment.Author.Login) > 0 {
 								// use that login to see if this comment was from a team member
@@ -224,7 +224,7 @@ func getFirstRespTimeStats() map[string]utils.JsonDuration {
 								// time window, so just use the end of the query window to determine the time
 								// to first response and break out of the loop
 								if comment.CreatedAt.After(endDateTime.Time) {
-									firstRespTime = endDateTime.Time.Sub(issueCreatedAt.Time)
+									firstRespTime = endDateTime.Time.Sub(prCreatedAt.Time)
 									break
 								}
 							}
@@ -248,14 +248,14 @@ func getFirstRespTimeStats() map[string]utils.JsonDuration {
 		} // end of loop over queries
 	} // end of loop over organizations
 
-	// if we found no issues in our search, then exit with an error message
+	// if we found no PRs in our search, then exit with an error message
 	if len(firstRespTimeList) == 0 {
-		fmt.Fprintf(os.Stderr, "\nWARN: No open issues found for the specified organization(s)\n")
+		fmt.Fprintf(os.Stderr, "\nWARN: No open PRs found for the specified organization(s)\n")
 		zeroDuration := utils.JsonDuration{time.Duration(0)}
 		return map[string]utils.JsonDuration{"minimum": zeroDuration, "firstQuartile": zeroDuration, "median": zeroDuration,
 			"average": zeroDuration, "thirdQuartile": zeroDuration, "maximum": zeroDuration}
 	}
-	fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team before %s\n", len(firstRespTimeList),
+	fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team before %s\n", len(firstRespTimeList),
 		teamName, endDateTime.Format("2006-01-02"))
 	// now, sort the resulting list of durations from greatest to least
 	sort.Slice(firstRespTimeList, func(i, j int) bool {
