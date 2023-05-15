@@ -73,10 +73,11 @@ func getIssueFirstRespTimeStats() map[string]utils.JsonDuration {
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
 		// define a couple of queries to run for each organization; the first is used to query
-		// for open issues and the second is used to query for closed issues that were closed
-		// after the end of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog", orgName))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog closed:>%s", orgName, endDateTime.Format("2006-01-02")))
+		// for open issues that were created before the end of our time window and the second is
+		// used to query for closed issues that were both created before and closed after the end
+		// of our query window
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s", orgName, endDateTime.Format("2006-01-02")))
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s", orgName, endDateTime.Format("2006-01-02"), endDateTime.Format("2006-01-02")))
 		queries := map[string]githubv4.String{
 			"open":   openQuery,
 			"closed": closedQuery,
@@ -135,10 +136,6 @@ func getIssueFirstRespTimeStats() map[string]utils.JsonDuration {
 						}
 						// save the current issue's creation time
 						issueCreatedAt := edge.Node.Issue.CreatedAt
-						// if the issue was created after the end of our query window, then skip it
-						if issueCreatedAt.After(endDateTime.Time) {
-							continue
-						}
 						// if this is a query for closed issues and the issue was closed before the start of
 						// our query window, then skip it
 						if queryType == "closed" {

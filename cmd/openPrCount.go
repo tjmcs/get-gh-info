@@ -132,10 +132,11 @@ func getOpenPrCount() map[string]interface{} {
 		// initialize a counter for the number of open PRs in the current organization
 		orgOpenPrCount := 0
 		// define a couple of queries to run for each organization; the first is used to query
-		// for open PRs and the second is used to query for closed PRs that were closed
-		// after the end of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog", orgName))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog closed:>%s", orgName, endDateTime.Format("2006-01-02")))
+		// for open PRs that were created before the end of our time window and the second is
+		// used to query for closed PRs that were both created before and closed after the end
+		// of our query window
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s", orgName, endDateTime.Format("2006-01-02")))
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s", orgName, endDateTime.Format("2006-01-02"), endDateTime.Format("2006-01-02")))
 		queries := map[string]githubv4.String{
 			"open":   openQuery,
 			"closed": closedQuery,
@@ -189,12 +190,6 @@ func getOpenPrCount() map[string]interface{} {
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
 						// if the current repository is not managed by the team we're interested in, skip it
 						if idx < 0 {
-							continue
-						}
-						// save the current PR's creation time
-						prCreatedAt := edge.Node.PullRequest.CreatedAt
-						// if the PR was created after the end of our query window, then skip it
-						if prCreatedAt.After(endDateTime.Time) {
 							continue
 						}
 						// if this is a closed PR and it was closed before the start of our query window,
