@@ -18,9 +18,10 @@ var (
 	getOpenIssuesCmd = &cobra.Command{
 		Use:   "countOpenIssues",
 		Short: "Counts the number of open issues in the named GitHub organization(s)",
-		Long: `Determines the number of open issues in the named GitHub organizations,
-skipping any issues that include the 'backlog' label and only counting issues
-in repositories that are managed by the named team.`,
+		Long: `Determines the number of open issues in the named GitHub organizations
+and in the defined time window (skipping any issues that include the
+'backlog' label and only counting issues in repositories that are managed
+by the named team)`,
 		Run: func(cmd *cobra.Command, args []string) {
 			utils.DumpMapAsJSON(getOpenIssueCount())
 		},
