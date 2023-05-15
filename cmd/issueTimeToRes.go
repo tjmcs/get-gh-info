@@ -19,11 +19,11 @@ import (
 var (
 	getIssueTimeToResStatsCmd = &cobra.Command{
 		Use:   "issueTimeToRes",
-		Short: "Calculates statistics for the time to resolution for isues",
+		Short: "Statistics for the 'time to resolution' of open isues",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
-and maximum time to resolution for issues closed in the named GitHub organizations
-and in the defined time window (skipping any issues that include the
-'backlog' label and only counting issues in repositories that are managed
+and maximum 'time to resolution' for all closed issues in the named GitHub
+organizations and in the defined time window (skipping any issues that include
+the 'backlog' label and only counting issues in repositories that are managed
 by the named team)`,
 		Run: func(cmd *cobra.Command, args []string) {
 			utils.DumpMapAsJSON(getIssueTimeToResStats())

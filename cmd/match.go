@@ -19,7 +19,7 @@ var (
 	searchPattern string
 	matchCmd      = &cobra.Command{
 		Use:   "match",
-		Short: "Generates a list of repositories that match the search criteria",
+		Short: "Show list of repositories that match the search criteria",
 		Long: `Constructs a list of all of the repositories who's name matches the search
 criteria passed in by the user from the named set of GitHub organizations.`,
 		Run: func(cmd *cobra.Command, args []string) {

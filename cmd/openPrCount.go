@@ -17,7 +17,7 @@ import (
 var (
 	getOpenPrsCmd = &cobra.Command{
 		Use:   "countOpenPrs",
-		Short: "Counts the number of open PRs in the named GitHub organization(s)",
+		Short: "Count of open PRs in the named GitHub organization(s)",
 		Long: `Determines the number of open PRs in the named named GitHub organizations
 and in the defined time window (skipping any PRs that include the
 'backlog' label and only counting PRs in repositories that are managed

@@ -15,8 +15,7 @@ var (
 	repoCmd  = &cobra.Command{
 		Use:   "repo",
 		Short: "Gather repository-related data",
-		Long: `The subcommand used as the root for all commands that make
-repository-related queries`,
+		Long:  "The subcommand used as the root for all queries for repository-related data",
 	}
 )
 
@@ -36,9 +35,9 @@ func init() {
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
 	rootCmd.PersistentFlags().StringVarP(&compTeam, "team", "t", "", "name of team to gather data for")
-	rootCmd.PersistentFlags().StringVarP(&duration, "lookback-time", "l", "", "the 'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
-	rootCmd.PersistentFlags().StringVarP(&referenceDate, "ref-date", "d", "", "reference date for time window (in YYYY-MM-DD format)")
-	rootCmd.PersistentFlags().BoolVarP(&completeWeeks, "complete-weeks", "w", false, "output data only for complete weeks (starting Monday)")
+	rootCmd.PersistentFlags().StringVarP(&duration, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
+	rootCmd.PersistentFlags().StringVarP(&referenceDate, "ref-date", "d", "", "reference date for time window (YYYY-MM-DD)")
+	rootCmd.PersistentFlags().BoolVarP(&completeWeeks, "complete-weeks", "w", false, "only output complete weeks (starting Monday)")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:

@@ -19,11 +19,11 @@ import (
 var (
 	getPrFirstRespTimeStatsCmd = &cobra.Command{
 		Use:   "prFirstRespTime",
-		Short: "Calculates statistics for the time to first response of open isues",
+		Short: "Statistics for the 'time to first response' of open isues",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
-and maximum time to first response for all open PRs in the named GitHub organizations
-and in the defined time window (skipping any PRs that include the
-'backlog' label and only counting PRs in repositories that are managed
+and maximum 'time to first response' for all open PRs in the named GitHub
+organizations and in the defined time window (skipping any PRs that include
+the 'backlog' label and only counting PRs in repositories that are managed
 by the named team)`,
 		Run: func(cmd *cobra.Command, args []string) {
 			utils.DumpMapAsJSON(getPrFirstRespTimeStats())

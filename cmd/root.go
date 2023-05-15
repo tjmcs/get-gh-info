@@ -42,7 +42,7 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "configuration file to use")
-	rootCmd.PersistentFlags().StringVarP(&outputFile, "file", "f", "", "file/stream to output data to (defaults to standard output)")
+	rootCmd.PersistentFlags().StringVarP(&outputFile, "file", "f", "", "file/stream for output (defaults to stdout)")
 	rootCmd.PersistentFlags().StringVarP(&orgList, "org-list", "o", "", "list of orgs to gather information from")
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
