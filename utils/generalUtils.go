@@ -125,6 +125,8 @@ func (j JsonDuration) format() string {
 		return fmt.Sprintf("%dms", d.Round(time.Millisecond))
 	} else if d >= time.Microsecond {
 		return fmt.Sprintf("%dus", d.Round(time.Microsecond))
+	} else if d == 0 {
+		return "0s"
 	}
 	// else, if we get here, just return the number of nanoseconds
 	return fmt.Sprintf("%dns", d.Nanoseconds())
