@@ -61,7 +61,7 @@ func getPrAgeStats() map[string]utils.JsonDuration {
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
 	// define the start and end time of our query window
-	startDateTime, endDateTime := utils.GetQueryTimeWindow()
+	_, endDateTime := utils.GetQueryTimeWindow()
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	prAgeList := []time.Duration{}
@@ -131,18 +131,15 @@ func getPrAgeStats() map[string]utils.JsonDuration {
 						}
 						// save the current PR's creation time
 						prCreatedAt := edge.Node.PullRequest.CreatedAt
-						// if this is a query for closed PRs and the PR was closed before the start of
-						// our query window, then skip it
+						// if this is a closed PR
 						if queryType == "closed" {
-							if edge.Node.PullRequest.ClosedAt.Before(startDateTime.Time) {
+							// and if this PR was closed before the end of the time window, then use that time
+							// to calculate the age of the issue and continue with the next issue
+							prClosedAt := edge.Node.PullRequest.ClosedAt
+							if prClosedAt.Before(endDateTime.Time) {
+								prAgeList = append(prAgeList, prClosedAt.Sub(prCreatedAt.Time))
 								continue
 							}
-						}
-						// if this is a closed issue and it was closed during the time window, then use that
-						// time to calculate the age of the issue
-						if queryType == "closed" {
-							prAgeList = append(prAgeList, edge.Node.PullRequest.ClosedAt.Sub(prCreatedAt.Time))
-							continue
 						}
 						// otherwise, the issue is still open so use the end time of the query window
 						// to calculate the age of the issue

@@ -61,7 +61,7 @@ func getIssueAgeStats() map[string]utils.JsonDuration {
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
 	// define the start and end time of our query window
-	startDateTime, endDateTime := utils.GetQueryTimeWindow()
+	_, endDateTime := utils.GetQueryTimeWindow()
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	issueAgeList := []time.Duration{}
@@ -130,18 +130,15 @@ func getIssueAgeStats() map[string]utils.JsonDuration {
 						}
 						// save the current issue's creation time
 						issueCreatedAt := edge.Node.Issue.CreatedAt
-						// if this is a query for closed issues and the issue was closed before the start of
-						// our query window, then skip it
+						// if this is a closed issue
 						if queryType == "closed" {
-							if edge.Node.Issue.ClosedAt.Before(startDateTime.Time) {
+							// and if this issue closed before the end of the time window, then use that time to
+							// calculate the age of the issue and continue with the next issue
+							issueClosedAt := edge.Node.Issue.ClosedAt
+							if issueClosedAt.Before(endDateTime.Time) {
+								issueAgeList = append(issueAgeList, issueClosedAt.Sub(issueCreatedAt.Time))
 								continue
 							}
-						}
-						// if this is a closed issue and it was closed during the time window, then use that
-						// time to calculate the age of the issue
-						if queryType == "closed" {
-							issueAgeList = append(issueAgeList, edge.Node.Issue.ClosedAt.Sub(issueCreatedAt.Time))
-							continue
 						}
 						// otherwise, the issue is still open so use the end time of the query window
 						// to calculate the age of the issue
