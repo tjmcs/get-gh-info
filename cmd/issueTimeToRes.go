@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
 	"time"
 
 	"github.com/shurcooL/githubv4"
@@ -52,7 +51,7 @@ func init() {
  * includes first response times for issues in repositories that are managed by the
  * named team(s)
  */
-func getIssueTimeToResStats() map[string]utils.JsonDuration {
+func getIssueTimeToResStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// initialize the vars map that we'll use when making our query for PR review contributions
@@ -61,8 +60,11 @@ func getIssueTimeToResStats() map[string]utils.JsonDuration {
 	vars["type"] = githubv4.SearchTypeIssue
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
-	// define the start and end time of our query window
+	// retrieve the start and end time for our query window
 	startDateTime, endDateTime := utils.GetQueryTimeWindow()
+	// save date strings for use in output (below)
+	startDateTimeStr := startDateTime.Format("2006-01-02")
+	endDateTimeStr := endDateTime.Format("2006-01-02")
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	resolutionTimeList := []time.Duration{}
@@ -71,7 +73,7 @@ func getIssueTimeToResStats() map[string]utils.JsonDuration {
 		// define the query to run for each organization; the query searches for closed
 		// issues that were closed after the start of our time window
 		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog closed:%s..%s", orgName,
-			startDateTime.Format("2006-01-02"), endDateTime.Format("2006-01-02")))
+			startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
 			"closed": closedQuery,
 		}
@@ -127,6 +129,10 @@ func getIssueTimeToResStats() map[string]utils.JsonDuration {
 						if idx < 0 {
 							continue
 						}
+						// if the repository associated with this issue is private or archived, then skip it
+						if edge.Node.Issue.Repository.IsPrivate || edge.Node.Issue.Repository.IsArchived {
+							continue
+						}
 						// save the time when this issue was closed
 						issueClosedAt := edge.Node.Issue.ClosedAt
 						// then save the current issue's creation time
@@ -149,28 +155,16 @@ func getIssueTimeToResStats() map[string]utils.JsonDuration {
 		} // end of loop over queries
 	} // end of loop over organizations
 
-	// if we found no issues in our search, then exit with an error message
-	if len(resolutionTimeList) == 0 {
-		fmt.Fprintf(os.Stderr, "\nWARN: No issues closed for the specified organization(s)\n")
-		zeroDuration := utils.JsonDuration{time.Duration(0)}
-		return map[string]utils.JsonDuration{"minimum": zeroDuration, "firstQuartile": zeroDuration, "median": zeroDuration,
-			"average": zeroDuration, "thirdQuartile": zeroDuration, "maximum": zeroDuration}
+	// calculate the stats for the slice of issue time to resolution values
+	prAgeStats, numClosedPrs := utils.GetJsonDurationStats(resolutionTimeList)
+	// print a message indicating how many open PRs were found
+	if numClosedPrs == 0 {
+		fmt.Fprintf(os.Stderr, "\nWARN: No closed issues found for the specified organization(s)\n")
+	} else {
+		fmt.Fprintf(os.Stderr, "\nFound %d closed issues in repositories managed by the '%s' team between %s and %s\n", numClosedPrs,
+			teamName, startDateTimeStr, endDateTimeStr)
 	}
-	fmt.Fprintf(os.Stderr, "\nFound %d issues closed in repositories managed by the '%s' team between %s and %s\n", len(resolutionTimeList),
-		teamName, startDateTime.Format("2006-01-02"), endDateTime.Format("2006-01-02"))
-	// now, sort the resulting list of durations from greatest to least
-	sort.Slice(resolutionTimeList, func(i, j int) bool {
-		return resolutionTimeList[i] > resolutionTimeList[j]
-	})
-	// from the sorted slice, find the minimum, first quartile, the median, average, third quartile,
-	// and maximum values
-	min := utils.JsonDuration{resolutionTimeList[len(resolutionTimeList)-1]}
-	firstQuartile := utils.JsonDuration{resolutionTimeList[(len(resolutionTimeList)*3)/4]}
-	median := utils.JsonDuration{resolutionTimeList[len(resolutionTimeList)/2]}
-	avg := utils.JsonDuration{utils.GetAverageDuration(resolutionTimeList)}
-	thirdQuartile := utils.JsonDuration{resolutionTimeList[len(resolutionTimeList)/4]}
-	max := utils.JsonDuration{resolutionTimeList[0]}
 	// add return the results as a map
-	return map[string]utils.JsonDuration{"minimum": min, "firstQuartile": firstQuartile, "median": median,
-		"average": avg, "thirdQuartile": thirdQuartile, "maximum": max}
+	return map[string]interface{}{"title": "Issue Time to Resolution", "start": startDateTimeStr,
+		"end": endDateTimeStr, "seriesLength": numClosedPrs, "stats": prAgeStats}
 }

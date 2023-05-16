@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
 	"time"
 
 	"github.com/shurcooL/githubv4"
@@ -51,7 +50,7 @@ func init() {
  * includes first response times for issues in repositories that are managed by
  * the named team(s)
  */
-func getIssueAgeStats() map[string]utils.JsonDuration {
+func getIssueAgeStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// initialize the vars map that we'll use when making our query for PR review contributions
@@ -60,8 +59,10 @@ func getIssueAgeStats() map[string]utils.JsonDuration {
 	vars["type"] = githubv4.SearchTypeIssue
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
-	// define the start and end time of our query window
-	_, endDateTime := utils.GetQueryTimeWindow()
+	// retrieve reference time for our query window
+	_, refDateTime := utils.GetQueryTimeWindow()
+	// save date strings for use in output (below)
+	refDateTimeStr := refDateTime.Format("2006-01-02")
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	issueAgeList := []time.Duration{}
@@ -70,8 +71,8 @@ func getIssueAgeStats() map[string]utils.JsonDuration {
 		// define a couple of queries to run for each organization; the first is used to query
 		// for open issues and the second is used to query for closed issues that were closed
 		// after the end of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s", orgName, endDateTime.Format("2006-01-02")))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s", orgName, endDateTime.Format("2006-01-02"), endDateTime.Format("2006-01-02")))
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s", orgName, refDateTimeStr))
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s", orgName, refDateTimeStr, refDateTimeStr))
 		queries := map[string]githubv4.String{
 			"open":   openQuery,
 			"closed": closedQuery,
@@ -128,21 +129,25 @@ func getIssueAgeStats() map[string]utils.JsonDuration {
 						if idx < 0 {
 							continue
 						}
+						// if the repository associated with this issue is private or archived, then skip it
+						if edge.Node.Issue.Repository.IsPrivate || edge.Node.Issue.Repository.IsArchived {
+							continue
+						}
 						// save the current issue's creation time
 						issueCreatedAt := edge.Node.Issue.CreatedAt
 						// if this is a closed issue
 						if queryType == "closed" {
-							// and if this issue closed before the end of the time window, then use that time to
+							// and if this issue closed before the reference time, then use that time to
 							// calculate the age of the issue and continue with the next issue
 							issueClosedAt := edge.Node.Issue.ClosedAt
-							if issueClosedAt.Before(endDateTime.Time) {
+							if issueClosedAt.Before(refDateTime.Time) {
 								issueAgeList = append(issueAgeList, issueClosedAt.Sub(issueCreatedAt.Time))
 								continue
 							}
 						}
 						// otherwise, the issue is still open so use the end time of the query window
 						// to calculate the age of the issue
-						issueAgeList = append(issueAgeList, endDateTime.Time.Sub(issueCreatedAt.Time))
+						issueAgeList = append(issueAgeList, refDateTime.Time.Sub(issueCreatedAt.Time))
 					}
 				}
 				// if we've reached the end of the list of contributions, break out of the loop
@@ -159,28 +164,16 @@ func getIssueAgeStats() map[string]utils.JsonDuration {
 		} // end of loop over queries
 	} // end of loop over organizations
 
-	// if we found no issues in our search, then exit with an error message
-	if len(issueAgeList) == 0 {
+	// calculate the stats for the slice of issue age values
+	issueAgeStats, numOpenIssues := utils.GetJsonDurationStats(issueAgeList)
+	// print a message indicating how many open issues were found
+	if numOpenIssues == 0 {
 		fmt.Fprintf(os.Stderr, "\nWARN: No open issues found for the specified organization(s)\n")
-		zeroDuration := utils.JsonDuration{time.Duration(0)}
-		return map[string]utils.JsonDuration{"minimum": zeroDuration, "firstQuartile": zeroDuration, "median": zeroDuration,
-			"average": zeroDuration, "thirdQuartile": zeroDuration, "maximum": zeroDuration}
+	} else {
+		fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team on %s\n", numOpenIssues,
+			teamName, refDateTimeStr)
 	}
-	fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team before %s\n", len(issueAgeList),
-		teamName, endDateTime.Format("2006-01-02"))
-	// now, sort the resulting list of durations from greatest to least
-	sort.Slice(issueAgeList, func(i, j int) bool {
-		return issueAgeList[i] > issueAgeList[j]
-	})
-	// from the sorted slice, find the minimum, first quartile, the median, average, third quartile,
-	// and maximum values
-	min := utils.JsonDuration{issueAgeList[len(issueAgeList)-1]}
-	firstQuartile := utils.JsonDuration{issueAgeList[(len(issueAgeList)*3)/4]}
-	median := utils.JsonDuration{issueAgeList[len(issueAgeList)/2]}
-	avg := utils.JsonDuration{utils.GetAverageDuration(issueAgeList)}
-	thirdQuartile := utils.JsonDuration{issueAgeList[len(issueAgeList)/4]}
-	max := utils.JsonDuration{issueAgeList[0]}
 	// add return the results as a map
-	return map[string]utils.JsonDuration{"minimum": min, "firstQuartile": firstQuartile, "median": median,
-		"average": avg, "thirdQuartile": thirdQuartile, "maximum": max}
+	return map[string]interface{}{"title": "Open Issue Age", "refDate": refDateTimeStr,
+		"seriesLength": numOpenIssues, "stats": issueAgeStats}
 }

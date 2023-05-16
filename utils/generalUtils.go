@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sort"
 	"time"
 
 	"gopkg.in/yaml.v2"
@@ -104,6 +105,77 @@ func DumpMapAsJSON(results interface{}) {
 }
 
 /*
+ * a utility function that can be used to return the stats (min, max, median, average
+ * first quartile, and third quartile) of a slice of data along with the length of
+ * the slice
+ */
+func GetJsonDurationStats(data []time.Duration) (map[string]JsonDuration, int) {
+	sliceLen := len(data)
+	// initialize a variable to hold the results
+	zeroDuration := JsonDuration{time.Duration(0)}
+	results := map[string]JsonDuration{"minimum": zeroDuration,
+		"firstQuartile": zeroDuration, "median": zeroDuration, "average": zeroDuration,
+		"thirdQuartile": zeroDuration, "maximum": zeroDuration}
+	// if the slice is empty, just return the results
+	if sliceLen == 0 {
+		return results, sliceLen
+	}
+	// if we have more than one value, then sort it from least to greatest
+	if sliceLen > 1 {
+		sort.Slice(data, func(i, j int) bool {
+			return data[i] < data[j]
+		})
+	}
+	// grab the two obvious values
+	results["minimum"] = JsonDuration{data[0]}
+	results["maximum"] = JsonDuration{data[sliceLen-1]}
+	results["average"] = JsonDuration{GetAverageDuration(data)}
+	// and grab the remaining stats based on the length of the slice; note that
+	// the first quartile is defined as the median of the lower half of the
+	// slice of durations and the third quartile is the median of the uppoer
+	// half fo that same slice, so the behavior changes a bit depending on
+	// the slice length
+	switch sliceLen {
+	case 1:
+		// only one value; all three (first quartile, median, and third quartile)
+		// are the same
+		results["median"] = JsonDuration{data[0]}
+		results["firstQuartile"] = results["median"]
+		results["thirdQuartile"] = results["median"]
+	case 2:
+		// if two values, the median is the average of those two numbers
+		results["median"] = JsonDuration{(data[0] + data[1]) / 2}
+		fallthrough
+	case 3:
+		// if three values, then the median is the middle value
+		results["median"] = JsonDuration{data[1]}
+		// for either a two or three value slice, the median of lower
+		// half is the first value and the median of the second half is
+		// the last value
+		results["firstQuartile"] = JsonDuration{data[0]}
+		results["thirdQuartile"] = JsonDuration{data[sliceLen-1]}
+	default:
+		// for the rest, we have to know if this is an odd-length slice or
+		// an even-length slice
+		if sliceLen%2 > 0 {
+			// if here, it's a odd length slice so things are easy
+			results["median"] = JsonDuration{data[sliceLen/2+1]}
+			results["firstQuartile"] = JsonDuration{data[sliceLen/4+1]}
+			results["thirdQuartile"] = JsonDuration{data[(sliceLen*3)/4+1]}
+		} else {
+			// if here, it's an even length slice so we have to do a little more work
+			// in this case the values we want are the average of the two values around
+			// where the actual value would be in an odd-length list
+			results["median"] = JsonDuration{(data[sliceLen/2] + data[sliceLen/2+1]) / 2}
+			results["firstQuartile"] = JsonDuration{(data[sliceLen/4] + data[sliceLen/4+1]) / 2}
+			results["thirdQuartile"] = JsonDuration{(data[(sliceLen*3)/4] + data[(sliceLen*3)/4+1]) / 2}
+		}
+	}
+	// finally, return the results
+	return results, sliceLen
+}
+
+/*
  * defind a type that lets us dump out a time.Duration as a
  * formatted string in JSON
  */
@@ -120,7 +192,7 @@ func (j JsonDuration) format() string {
 	} else if d >= time.Minute {
 		return fmt.Sprintf("%.2fm", d.Minutes())
 	} else if d >= time.Second {
-		return fmt.Sprintf("%.2fh", d.Seconds())
+		return fmt.Sprintf("%.2fs", d.Seconds())
 	} else if d >= time.Millisecond {
 		return fmt.Sprintf("%dms", d.Round(time.Millisecond))
 	} else if d >= time.Microsecond {

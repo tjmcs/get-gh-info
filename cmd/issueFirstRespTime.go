@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"sort"
 	"time"
 
 	"github.com/shurcooL/githubv4"
@@ -52,7 +51,7 @@ func init() {
  * includes first response times for issues in repositories that are managed by the
  * named team(s)
  */
-func getIssueFirstRespTimeStats() map[string]utils.JsonDuration {
+func getIssueFirstRespTimeStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// initialize the vars map that we'll use when making our query for PR review contributions
@@ -65,8 +64,10 @@ func getIssueFirstRespTimeStats() map[string]utils.JsonDuration {
 	_, teamMemberMap := utils.GetTeamMembers(teamName)
 	// and from that map, construct list of member logins for that team
 	teamMemberIds := utils.GetTeamMemberIds(teamMemberMap)
-	// define the start and end time of our query window
-	startDateTime, endDateTime := utils.GetQueryTimeWindow()
+	// retrieve the start and end time for our query window
+	_, refDateTime := utils.GetQueryTimeWindow()
+	// save date strings for use in output (below)
+	refDateTimeStr := refDateTime.Format("2006-01-02")
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	firstRespTimeList := []time.Duration{}
@@ -76,15 +77,17 @@ func getIssueFirstRespTimeStats() map[string]utils.JsonDuration {
 		// for open issues that were created before the end of our time window and the second is
 		// used to query for closed issues that were both created before and closed after the end
 		// of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s", orgName, endDateTime.Format("2006-01-02")))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s", orgName, endDateTime.Format("2006-01-02"), endDateTime.Format("2006-01-02")))
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s",
+			orgName, refDateTimeStr))
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s",
+			orgName, refDateTimeStr, refDateTimeStr))
 		queries := map[string]githubv4.String{
 			"open":   openQuery,
 			"closed": closedQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
-		for queryType, query := range queries {
+		for _, query := range queries {
 			// add the query string to use with this query to the vars map
 			vars["query"] = query
 			// initialize the flag that we use to determine if we're trying to retrieve
@@ -134,25 +137,22 @@ func getIssueFirstRespTimeStats() map[string]utils.JsonDuration {
 						if idx < 0 {
 							continue
 						}
+						// if the repository associated with this issue is private or archived, then skip it
+						if edge.Node.Issue.Repository.IsPrivate || edge.Node.Issue.Repository.IsArchived {
+							continue
+						}
 						// save the current issue's creation time
 						issueCreatedAt := edge.Node.Issue.CreatedAt
-						// if this is a query for closed issues and the issue was closed before the start of
-						// our query window, then skip it
-						if queryType == "closed" {
-							if edge.Node.Issue.ClosedAt.Before(startDateTime.Time) {
-								continue
-							}
-						}
 						// if no comments were found for this issue, then use the end of our query window
 						// to determine the time to first response
 						if len(edge.Node.Issue.Comments.Nodes) == 0 {
-							firstRespTimeList = append(firstRespTimeList, endDateTime.Time.Sub(issueCreatedAt.Time))
+							firstRespTimeList = append(firstRespTimeList, refDateTime.Time.Sub(issueCreatedAt.Time))
 							continue
 						}
 						// if we got this far, then the current repository is managed by the team we're interested in,
 						// so look for the first response from a member of the team; first, initialize a variable to
 						// hold the difference between the end of our query window and the creation time for this issue
-						firstRespTime := endDateTime.Time.Sub(issueCreatedAt.Time)
+						firstRespTime := refDateTime.Time.Sub(issueCreatedAt.Time)
 						for _, comment := range edge.Node.Issue.Comments.Nodes {
 							// if the comment has an author (it should)
 							if len(comment.Author.Login) > 0 {
@@ -166,10 +166,16 @@ func getIssueFirstRespTimeStats() map[string]utils.JsonDuration {
 								// reached the end of the time where a user could have responded within our
 								// time window, so just use the end of the query window to determine the time
 								// to first response and break out of the loop
-								if comment.CreatedAt.After(endDateTime.Time) {
-									firstRespTime = endDateTime.Time.Sub(issueCreatedAt.Time)
+								if comment.CreatedAt.After(refDateTime.Time) {
+									firstRespTime = refDateTime.Time.Sub(issueCreatedAt.Time)
 									break
 								}
+
+								// if get here, then we've found a comment from a member of the team that was
+								// created before the end of our query window, so calculate the time to first
+								// response and break out of the loop
+								firstRespTime = comment.CreatedAt.Time.Sub(issueCreatedAt.Time)
+								break
 							}
 						}
 						// and append this first response time to the list of first response times
@@ -191,28 +197,16 @@ func getIssueFirstRespTimeStats() map[string]utils.JsonDuration {
 		} // end of loop over queries
 	} // end of loop over organizations
 
-	// if we found no issues in our search, then exit with an error message
-	if len(firstRespTimeList) == 0 {
+	// calculate the stats for the slice of issue time to first response values
+	issueRespTimeStats, numOpenIssues := utils.GetJsonDurationStats(firstRespTimeList)
+	// print a message indicating how many open PRs were found
+	if numOpenIssues == 0 {
 		fmt.Fprintf(os.Stderr, "\nWARN: No open issues found for the specified organization(s)\n")
-		zeroDuration := utils.JsonDuration{time.Duration(0)}
-		return map[string]utils.JsonDuration{"minimum": zeroDuration, "firstQuartile": zeroDuration, "median": zeroDuration,
-			"average": zeroDuration, "thirdQuartile": zeroDuration, "maximum": zeroDuration}
+	} else {
+		fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team on %s\n", numOpenIssues,
+			teamName, refDateTimeStr)
 	}
-	fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team before %s\n", len(firstRespTimeList),
-		teamName, endDateTime.Format("2006-01-02"))
-	// now, sort the resulting list of durations from greatest to least
-	sort.Slice(firstRespTimeList, func(i, j int) bool {
-		return firstRespTimeList[i] > firstRespTimeList[j]
-	})
-	// from the sorted slice, find the minimum, first quartile, the median, average, third quartile,
-	// and maximum values
-	min := utils.JsonDuration{firstRespTimeList[len(firstRespTimeList)-1]}
-	firstQuartile := utils.JsonDuration{firstRespTimeList[(len(firstRespTimeList)*3)/4]}
-	median := utils.JsonDuration{firstRespTimeList[len(firstRespTimeList)/2]}
-	avg := utils.JsonDuration{utils.GetAverageDuration(firstRespTimeList)}
-	thirdQuartile := utils.JsonDuration{firstRespTimeList[len(firstRespTimeList)/4]}
-	max := utils.JsonDuration{firstRespTimeList[0]}
 	// add return the results as a map
-	return map[string]utils.JsonDuration{"minimum": min, "firstQuartile": firstQuartile, "median": median,
-		"average": avg, "thirdQuartile": thirdQuartile, "maximum": max}
+	return map[string]interface{}{"title": "Open Issue First Response Time", "refDate": refDateTimeStr,
+		"seriesLength": numOpenIssues, "stats": issueRespTimeStats}
 }

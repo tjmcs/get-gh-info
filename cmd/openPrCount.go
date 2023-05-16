@@ -57,8 +57,10 @@ type prSearchEdges []struct {
 			Title      string
 			Url        string
 			Repository struct {
-				Name string
-				Url  string
+				Name       string
+				Url        string
+				IsPrivate  bool
+				IsArchived bool
 			}
 			Assignees struct {
 				Edges []struct {
@@ -126,7 +128,9 @@ func getOpenPrCount() map[string]interface{} {
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
 	// define the start and end time of our query window
-	startDateTime, endDateTime := utils.GetQueryTimeWindow()
+	_, refDateTime := utils.GetQueryTimeWindow()
+	// save date strings for use in output (below)
+	refDateTimeStr := refDateTime.Format("2006-01-02")
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
 		// initialize a counter for the number of open PRs in the current organization
@@ -135,15 +139,15 @@ func getOpenPrCount() map[string]interface{} {
 		// for open PRs that were created before the end of our time window and the second is
 		// used to query for closed PRs that were both created before and closed after the end
 		// of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s", orgName, endDateTime.Format("2006-01-02")))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s", orgName, endDateTime.Format("2006-01-02"), endDateTime.Format("2006-01-02")))
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s", orgName, refDateTimeStr))
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s", orgName, refDateTimeStr, refDateTimeStr))
 		queries := map[string]githubv4.String{
 			"open":   openQuery,
 			"closed": closedQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
-		for queryType, query := range queries {
+		for _, query := range queries {
 			// add the query string to use with this query to the vars map
 			vars["query"] = query
 			// of results for each organization (or not)
@@ -192,12 +196,9 @@ func getOpenPrCount() map[string]interface{} {
 						if idx < 0 {
 							continue
 						}
-						// if this is a closed PR and it was closed before the start of our query window,
-						// then skip it
-						if queryType == "closed" {
-							if edge.Node.PullRequest.ClosedAt.Before(startDateTime.Time) {
-								continue
-							}
+						// if the repository associated with this PR is private or archived, then skip it
+						if edge.Node.PullRequest.Repository.IsPrivate || edge.Node.PullRequest.Repository.IsArchived {
+							continue
 						}
 						orgOpenPrCount++
 						openPrCount++
@@ -219,7 +220,7 @@ func getOpenPrCount() map[string]interface{} {
 	}
 	// add the total open PR count to the openPrCountMap
 	openPrCountMap["total"] = openPrCount
-	fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team before %s\n", openPrCount,
-		teamName, endDateTime.Format("2006-01-02"))
-	return openPrCountMap
+	fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team on %s\n", openPrCount,
+		teamName, refDateTimeStr)
+	return map[string]interface{}{"title": "Open PR Counts", "refDate": refDateTimeStr, "counts": openPrCountMap}
 }
