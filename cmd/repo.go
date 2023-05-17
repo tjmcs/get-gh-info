@@ -12,7 +12,10 @@ import (
 // rootCmd represents the base command when called without any subcommands
 var (
 	compTeam string
-	repoCmd  = &cobra.Command{
+	// restrictToTeam is used in several subcommands to restrict the comments included
+	// as feedback to only those that are made by immediate team members
+	restrictToTeam bool
+	repoCmd        = &cobra.Command{
 		Use:   "repo",
 		Short: "Gather repository-related data",
 		Long:  "The subcommand used as the root for all queries for repository-related data",

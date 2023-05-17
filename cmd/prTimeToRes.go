@@ -38,14 +38,13 @@ func init() {
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	getPrTimeToResStatsCmd.PersistentFlags().StringVarP(&duration, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
+	getPrTimeToResStatsCmd.Flags().StringVarP(&duration, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("lookbackTime", rootCmd.PersistentFlags().Lookup("lookback-time"))
-
+	viper.BindPFlag("lookbackTime", getPrTimeToResStatsCmd.Flags().Lookup("lookback-time"))
 }
 
 /*

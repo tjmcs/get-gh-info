@@ -11,6 +11,7 @@ import (
 
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
@@ -40,8 +41,10 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
+	getIssueStalenessStatsCmd.Flags().BoolVarP(&restrictToTeam, "restrict-to-team", "r", false, "only count comments from immediate team members")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
+	viper.BindPFlag("restrictToTeam", getIssueStalenessStatsCmd.Flags().Lookup("restrict-to-team"))
 }
 
 /*
@@ -62,11 +65,15 @@ func getIssueStalenessStats() map[string]interface{} {
 	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "DESC"}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
-	// // and the details for members of the corresponding team
-	// _, teamMemberMap := utils.GetTeamMembers(teamName)
-	// // and from that map, construct list of member logins for that team
-	// teamMemberIds := utils.GetTeamMemberIds(teamMemberMap)
-
+	// should we only count comments from immediate team members?
+	commentsFromTeamOnly := viper.GetBool("restrictToTeam")
+	teamMemberIds := []string{}
+	if !commentsFromTeamOnly {
+		// and the details for members of the corresponding team
+		_, teamMemberMap := utils.GetTeamMembers(teamName)
+		// and from that map, construct list of member logins for that team
+		teamMemberIds = utils.GetTeamMemberIds(teamMemberMap)
+	}
 	// retrieve the start and end time for our query window
 	_, refDateTime := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
@@ -161,20 +168,25 @@ func getIssueStalenessStats() map[string]interface{} {
 							}
 							// if the comment has an author (it should)
 							if len(comment.Author.Login) > 0 {
-								// // use that login to see if this comment was from a team member
-								// idx := utils.FindIndexOf(comment.Author.Login, teamMemberIds)
-								// // if the comment was not from a team member, skip it
-								// if idx < 0 {
-								// 	continue
-								// }
-
-								// if the author isn't an owner of this repository, member of the organization
-								// that owns this repository, or collaborator on this repository then skip this
-								// comment
-								if comment.AuthorAssociation != "OWNER" &&
-									comment.AuthorAssociation != "MEMBER" &&
-									comment.AuthorAssociation != "COLLABORATOR" {
-									continue
+								// if the flag to only count comments from the immediate team was
+								// set, then only count comments from immediate team members
+								if commentsFromTeamOnly {
+									// if here, looking only for comments only from immediate team members,
+									// so if this comment is not from an immediate team member skip it
+									idx := utils.FindIndexOf(comment.Author.Login, teamMemberIds)
+									if idx < 0 {
+										continue
+									}
+								} else {
+									// otherwise (by default), we're looking for comments from anyone who is
+									// an owner of this repository, a member of the organization that owns this
+									// repository, or collaborator on this repository; if that's not the case
+									// for this comment, then skip it
+									if comment.AuthorAssociation != "OWNER" &&
+										comment.AuthorAssociation != "MEMBER" &&
+										comment.AuthorAssociation != "COLLABORATOR" {
+										continue
+									}
 								}
 								// if get here, then we've found a comment from a member of the team,
 								// so use the time the comment was created to calculate a staleness

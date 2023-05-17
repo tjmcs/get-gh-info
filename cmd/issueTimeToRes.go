@@ -44,7 +44,7 @@ func init() {
 	getIssueTimeToResStatsCmd.Flags().StringVarP(&duration, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("lookbackTime", rootCmd.PersistentFlags().Lookup("lookback-time"))
+	viper.BindPFlag("lookbackTime", getIssueTimeToResStatsCmd.Flags().Lookup("lookback-time"))
 }
 
 /*
