@@ -65,6 +65,8 @@ func getIssueStalenessStats() map[string]interface{} {
 	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "DESC"}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
+	// should we filter out private repositories?
+	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
 	// should we only count comments from immediate team members?
 	commentsFromTeamOnly := viper.GetBool("restrictToTeam")
 	teamMemberIds := []string{}
@@ -145,8 +147,9 @@ func getIssueStalenessStats() map[string]interface{} {
 						if idx < 0 {
 							continue
 						}
-						// if the repository associated with this issue is private or archived, then skip it
-						if edge.Node.Issue.Repository.IsPrivate || edge.Node.Issue.Repository.IsArchived {
+						// if the repository associated with this issue is private and we're excluding
+						// private repositories or if it is archived, then skip it
+						if (excludePrivateRepos && edge.Node.Issue.Repository.IsPrivate) || edge.Node.Issue.Repository.IsArchived {
 							continue
 						}
 						// save the current issue's creation time

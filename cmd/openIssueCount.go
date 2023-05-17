@@ -10,6 +10,7 @@ import (
 
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
@@ -129,6 +130,8 @@ func getOpenIssueCount() map[string]interface{} {
 	openIssueCountMap := map[string]interface{}{}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
+	// should we filter out private repositories?
+	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
 	// retrieve the reference time for our query window
 	refDateTime, _ := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
@@ -198,8 +201,9 @@ func getOpenIssueCount() map[string]interface{} {
 						if idx < 0 {
 							continue
 						}
-						// if the repository associated with this issue is private or archived, then skip it
-						if edge.Node.Issue.Repository.IsPrivate || edge.Node.Issue.Repository.IsArchived {
+						// if the repository associated with this issue is private and we're excluding
+						// private repositories or if it is archived, then skip it
+						if (excludePrivateRepos && edge.Node.Issue.Repository.IsPrivate) || edge.Node.Issue.Repository.IsArchived {
 							continue
 						}
 						orgOpenIssueCount++

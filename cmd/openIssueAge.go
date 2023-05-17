@@ -11,6 +11,7 @@ import (
 
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
@@ -60,6 +61,8 @@ func getIssueAgeStats() map[string]interface{} {
 	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
+	// should we filter out private repositories?
+	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
 	// retrieve reference time for our query window
 	refDateTime, _ := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
@@ -130,8 +133,9 @@ func getIssueAgeStats() map[string]interface{} {
 						if idx < 0 {
 							continue
 						}
-						// if the repository associated with this issue is private or archived, then skip it
-						if edge.Node.Issue.Repository.IsPrivate || edge.Node.Issue.Repository.IsArchived {
+						// if the repository associated with this issue is private and we're excluding
+						// private repositories or if it is archived, then skip it
+						if (excludePrivateRepos && edge.Node.Issue.Repository.IsPrivate) || edge.Node.Issue.Repository.IsArchived {
 							continue
 						}
 						// save the current issue's creation time
