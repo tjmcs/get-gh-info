@@ -3,7 +3,7 @@
   - &Ricardo {user: Ricardo, name: Ricardo Feliciano, gitHubId: felicianotech}
   - &Romain {user: Romain, name: Romain Sylvian, gitHubId: rsylvian}
   - &Adam {user: Adam, name: Adam Hartley, gitHubId: BytesGuy}
-  - &Jeff {user: Jeff, name: Jeff Chen, gitHubId: Jalexchen}
+  - &Jeff {user: Jeff, name: Jeff Chen, gitHubId: JalexChen}
   - &Kyle {user: Kyle, name: Kyle Tryon, gitHubId: KyleTryon}
   - &Brian {user: Brian, name: Brian Vu, gitHubId: brivu}
   - &Eric {user: Eric, name: Eric Ribeiro, gitHubId: EricRibeiro}
