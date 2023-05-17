@@ -11,6 +11,7 @@ import (
 
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
@@ -40,8 +41,10 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
+	getIssueTimeToResStatsCmd.Flags().StringVarP(&duration, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
+	viper.BindPFlag("lookbackTime", rootCmd.PersistentFlags().Lookup("lookback-time"))
 }
 
 /*
