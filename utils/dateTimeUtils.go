@@ -213,5 +213,5 @@ func GetQueryTimeWindow() (githubv4.DateTime, githubv4.DateTime) {
 	}
 	fmt.Fprintf(os.Stderr, "INFO: time window for query is %s through %s\n", startDateTime.Format("2006-01-02"), endDateTime.Format("2006-01-02"))
 	// otherwise, return the start and end date times for our query window
-	return githubv4.DateTime{startDateTime}, githubv4.DateTime{refDateTime}
+	return githubv4.DateTime{startDateTime}, githubv4.DateTime{endDateTime}
 }
