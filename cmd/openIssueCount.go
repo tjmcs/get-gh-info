@@ -130,7 +130,7 @@ func getOpenIssueCount() map[string]interface{} {
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
 	// retrieve the reference time for our query window
-	_, refDateTime := utils.GetQueryTimeWindow()
+	refDateTime, _ := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
 	refDateTimeStr := refDateTime.Format("2006-01-02")
 	// loop over the input organization names

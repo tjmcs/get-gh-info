@@ -130,8 +130,8 @@ func getOpenPrCount() map[string]interface{} {
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
 	// define the start and end time of our query window
-	_, refDateTime := utils.GetQueryTimeWindow()
-	// save date strings for use in output (below)
+	refDateTime, _ := utils.GetQueryTimeWindow()
+	// retrieve the reference time for our query window
 	refDateTimeStr := refDateTime.Format("2006-01-02")
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {

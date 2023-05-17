@@ -61,7 +61,7 @@ func getIssueAgeStats() map[string]interface{} {
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
 	// retrieve reference time for our query window
-	_, refDateTime := utils.GetQueryTimeWindow()
+	refDateTime, _ := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
 	refDateTimeStr := refDateTime.Format("2006-01-02")
 	// and initialize a list of durations that will be used to store the time to first

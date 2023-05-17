@@ -73,8 +73,8 @@ func getPrStalenessStats() map[string]interface{} {
 		// and from that map, construct list of member logins for that team
 		teamMemberIds = utils.GetTeamMemberIds(teamMemberMap)
 	}
-	// retrieve the start and end time for our query window
-	_, refDateTime := utils.GetQueryTimeWindow()
+	// retrieve the reference time for our query window
+	refDateTime, _ := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
 	refDateTimeStr := refDateTime.Format("2006-01-02")
 	// and initialize a list of durations that will be used to store the time to first
