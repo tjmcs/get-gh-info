@@ -17,7 +17,7 @@ import (
 // contribSummaryCmd represents the 'contribSummary' command
 var (
 	getOpenIssuesCmd = &cobra.Command{
-		Use:   "countOpenIssues",
+		Use:   "count",
 		Short: "Count of open issues in the named GitHub organization(s)",
 		Long: `Determines the number of open issues in the named GitHub organizations
 and in the defined time window (skipping any issues that include the
@@ -30,7 +30,7 @@ by the named team)`,
 )
 
 func init() {
-	repoCmd.AddCommand(getOpenIssuesCmd)
+	issuesCmd.AddCommand(getOpenIssuesCmd)
 
 	// Here you will define your flags and configuration settings.
 

@@ -18,7 +18,7 @@ import (
 // contribSummaryCmd represents the 'contribSummary' command
 var (
 	getPrFirstRespTimeStatsCmd = &cobra.Command{
-		Use:   "prFirstRespTime",
+		Use:   "firstResponseTime",
 		Short: "Statistics for the 'time to first response' of open isues",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
 and maximum 'time to first response' for all open PRs in the named GitHub
@@ -32,7 +32,7 @@ by the named team)`,
 )
 
 func init() {
-	repoCmd.AddCommand(getPrFirstRespTimeStatsCmd)
+	pullsCmd.AddCommand(getPrFirstRespTimeStatsCmd)
 
 	// Here you will define your flags and configuration settings.
 

@@ -18,7 +18,7 @@ import (
 // contribSummaryCmd represents the 'contribSummary' command
 var (
 	getIssueTimeToResStatsCmd = &cobra.Command{
-		Use:   "issueTimeToRes",
+		Use:   "timeToResolution",
 		Short: "Statistics for the 'time to resolution' of open isues",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
 and maximum 'time to resolution' for all closed issues in the named GitHub
@@ -32,7 +32,7 @@ by the named team)`,
 )
 
 func init() {
-	repoCmd.AddCommand(getIssueTimeToResStatsCmd)
+	issuesCmd.AddCommand(getIssueTimeToResStatsCmd)
 
 	// Here you will define your flags and configuration settings.
 

@@ -17,7 +17,7 @@ import (
 // contribSummaryCmd represents the 'contribSummary' command
 var (
 	getOpenPrsCmd = &cobra.Command{
-		Use:   "countOpenPrs",
+		Use:   "count",
 		Short: "Count of open PRs in the named GitHub organization(s)",
 		Long: `Determines the number of open PRs in the named named GitHub organizations
 and in the defined time window (skipping any PRs that include the
@@ -30,7 +30,7 @@ by the named team)`,
 )
 
 func init() {
-	repoCmd.AddCommand(getOpenPrsCmd)
+	pullsCmd.AddCommand(getOpenPrsCmd)
 
 	// Here you will define your flags and configuration settings.
 

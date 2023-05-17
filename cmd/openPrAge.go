@@ -18,7 +18,7 @@ import (
 // contribSummaryCmd represents the 'contribSummary' command
 var (
 	openPrAgeCmd = &cobra.Command{
-		Use:   "openPrAge",
+		Use:   "age",
 		Short: "Statistics for the 'age' of open pull requests",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
 and maximum 'age' for all open PRs in the named GitHub organizations in
@@ -31,7 +31,7 @@ and only counting PRs in repositories that are managed by the named team)`,
 )
 
 func init() {
-	repoCmd.AddCommand(openPrAgeCmd)
+	pullsCmd.AddCommand(openPrAgeCmd)
 
 	// Here you will define your flags and configuration settings.
 

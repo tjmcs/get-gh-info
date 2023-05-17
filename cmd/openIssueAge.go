@@ -18,7 +18,7 @@ import (
 // contribSummaryCmd represents the 'contribSummary' command
 var (
 	getIssueAgeStatsCmd = &cobra.Command{
-		Use:   "openIssueAge",
+		Use:   "age",
 		Short: "Statistics for the 'age' of open isues",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
 and maximum 'age' for all open issues in the named GitHub organizations in
@@ -31,7 +31,7 @@ and only counting issues in repositories that are managed by the named team)`,
 )
 
 func init() {
-	repoCmd.AddCommand(getIssueAgeStatsCmd)
+	issuesCmd.AddCommand(getIssueAgeStatsCmd)
 
 	// Here you will define your flags and configuration settings.
 

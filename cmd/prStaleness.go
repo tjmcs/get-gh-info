@@ -18,7 +18,7 @@ import (
 // contribSummaryCmd represents the 'contribSummary' command
 var (
 	getPrStalenessStatsCmd = &cobra.Command{
-		Use:   "prStaleness",
+		Use:   "staleness",
 		Short: "Statistics for the time since the last response for open PRs",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
 third quartile and maximum 'time since the last response' or 'staleness'
@@ -32,7 +32,7 @@ counting PRs in repositories that are managed by the named team)`,
 )
 
 func init() {
-	repoCmd.AddCommand(getPrStalenessStatsCmd)
+	pullsCmd.AddCommand(getPrStalenessStatsCmd)
 
 	// Here you will define your flags and configuration settings.
 
