@@ -58,12 +58,14 @@ func getIssueFirstRespTimeStats() map[string]interface{} {
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
+	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
-	// and the details for members of the corresponding team
-	_, teamMemberMap := utils.GetTeamMembers(teamName)
-	// and from that map, construct list of member logins for that team
-	teamMemberIds := utils.GetTeamMemberIds(teamMemberMap)
+	// // and the details for members of the corresponding team
+	// _, teamMemberMap := utils.GetTeamMembers(teamName)
+	// // and from that map, construct list of member logins for that team
+	// teamMemberIds := utils.GetTeamMemberIds(teamMemberMap)
+
 	// retrieve the start and end time for our query window
 	_, refDateTime := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
@@ -143,23 +145,32 @@ func getIssueFirstRespTimeStats() map[string]interface{} {
 						}
 						// save the current issue's creation time
 						issueCreatedAt := edge.Node.Issue.CreatedAt
-						// if no comments were found for this issue, then use the end of our query window
-						// to determine the time to first response
-						if len(edge.Node.Issue.Comments.Nodes) == 0 {
-							firstRespTimeList = append(firstRespTimeList, refDateTime.Time.Sub(issueCreatedAt.Time))
-							continue
-						}
 						// if we got this far, then the current repository is managed by the team we're interested in,
 						// so look for the first response from a member of the team; first, initialize a variable to
 						// hold the difference between the end of our query window and the creation time for this issue
 						firstRespTime := refDateTime.Time.Sub(issueCreatedAt.Time)
+						// if no comments were found for this issue, then use the default staleness time
+						if len(edge.Node.Issue.Comments.Nodes) == 0 {
+							firstRespTimeList = append(firstRespTimeList, refDateTime.Time.Sub(issueCreatedAt.Time))
+							continue
+						}
+						// loop over the comments for this issue, looking for the first comment from a team member
 						for _, comment := range edge.Node.Issue.Comments.Nodes {
 							// if the comment has an author (it should)
 							if len(comment.Author.Login) > 0 {
-								// use that login to see if this comment was from a team member
-								idx := utils.FindIndexOf(comment.Author.Login, teamMemberIds)
-								// if the comment was not from a team member, skip it
-								if idx < 0 {
+								// // use that login to see if this comment was from a team member
+								// idx := utils.FindIndexOf(comment.Author.Login, teamMemberIds)
+								// // if the comment was not from a team member, skip it
+								// if idx < 0 {
+								// 	continue
+								// }
+
+								// if the author isn't an owner of this repository, member of the organization
+								// that owns this repository, or collaborator on this repository then skip this
+								// comment
+								if comment.AuthorAssociation != "OWNER" &&
+									comment.AuthorAssociation != "MEMBER" &&
+									comment.AuthorAssociation != "COLLABORATOR" {
 									continue
 								}
 								// if the comment was created after the end of our query window, then we've

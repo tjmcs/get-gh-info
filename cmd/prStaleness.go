@@ -16,22 +16,22 @@ import (
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	getPrTimeToResStatsCmd = &cobra.Command{
-		Use:   "prTimeToRes",
-		Short: "Statistics for the time to first response of open isues",
+	getPrStalenessStatsCmd = &cobra.Command{
+		Use:   "prStaleness",
+		Short: "Statistics for the time since the last response for open PRs",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
-and maximum 'time to resolution' for all closed PRs in the named GitHub
-organizations and in the defined time window (skipping any PRs that include
-the 'backlog' label and only counting PRs in repositories that are managed
-by the named team)`,
+third quartile and maximum 'time since the last response' or 'staleness'
+for all closed PRs in the named GitHub organizations and in the defined
+time window (skipping any PRs that include the 'backlog' label and only
+counting PRs in repositories that are managed by the named team)`,
 		Run: func(cmd *cobra.Command, args []string) {
-			utils.DumpMapAsJSON(getPrTimeToResStats())
+			utils.DumpMapAsJSON(getPrStalenessStats())
 		},
 	}
 )
 
 func init() {
-	repoCmd.AddCommand(getPrTimeToResStatsCmd)
+	repoCmd.AddCommand(getPrStalenessStatsCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -46,36 +46,45 @@ func init() {
 
 /*
  * define the function that is used to calculate the statistics associated with
- * the "time to first response" for any open PRs in the named GitHub organization(s);
+ * the "staleness time" for any open PRs in the named GitHub organization(s);
  * note that this function skips open PRs that include the 'backlog' label and only
  * includes first response times for PRs in repositories that are managed by the
  * named team(s)
  */
-func getPrTimeToResStats() map[string]interface{} {
+func getPrStalenessStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// initialize the vars map that we'll use when making our query for PR review contributions
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
-	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
+	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "DESC"}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
-	// define the start and end time of our query window
-	startDateTime, endDateTime := utils.GetQueryTimeWindow()
+	// // and the details for members of the corresponding team
+	// _, teamMemberMap := utils.GetTeamMembers(teamName)
+	// // and from that map, construct list of member logins for that team
+	// teamMemberIds := utils.GetTeamMemberIds(teamMemberMap)
+
+	// retrieve the start and end time for our query window
+	_, refDateTime := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
-	startDateTimeStr := startDateTime.Format("2006-01-02")
-	endDateTimeStr := endDateTime.Format("2006-01-02")
+	refDateTimeStr := refDateTime.Format("2006-01-02")
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
-	resolutionTimeList := []time.Duration{}
+	stalenessTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define the query to run for each organization; the query searches for closed
-		// PRs that were closed after the start of our time window
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog closed:%s..%s", orgName,
-			startDateTimeStr, endDateTimeStr))
+		// define a couple of queries to run for each organization; the first is used to query
+		// for open PRs that were created before the end of our time window and the second is
+		// used to query for closed PRs that were both created before and closed after the end
+		// of our query window
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s",
+			orgName, refDateTimeStr))
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s",
+			orgName, refDateTimeStr, refDateTimeStr))
 		queries := map[string]githubv4.String{
+			"open":   openQuery,
 			"closed": closedQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
@@ -134,12 +143,57 @@ func getPrTimeToResStats() map[string]interface{} {
 						if edge.Node.PullRequest.Repository.IsPrivate || edge.Node.PullRequest.Repository.IsArchived {
 							continue
 						}
-						// save the time when this issue was closed
-						prClosedAt := edge.Node.PullRequest.ClosedAt
-						// then save the current PR's creation time
+						// save the current PR's creation time
 						prCreatedAt := edge.Node.PullRequest.CreatedAt
-						// and append the difference (the resolution time) to the list of resolution times
-						resolutionTimeList = append(resolutionTimeList, prClosedAt.Time.Sub(prCreatedAt.Time))
+						// if we got this far, then the current repository is managed by the team we're interested
+						// in, so initialize a variable to store the default staleness time for this PR (here, the
+						// default is the time between the PR's creation and the end of our query window)
+						stalenessTime := refDateTime.Time.Sub(prCreatedAt.Time)
+						// if no comments were found for this PR, then use the default staleness time
+						if len(edge.Node.PullRequest.Comments.Nodes) == 0 {
+							stalenessTimeList = append(stalenessTimeList, stalenessTime)
+							continue
+						}
+						// loop over the comments for this PR, looking for the first comment from a team member
+						for _, comment := range edge.Node.PullRequest.Comments.Nodes {
+							// if this comment was created after the reference time, then skip it
+							if comment.CreatedAt.After(refDateTime.Time) {
+								continue
+							}
+							// if the comment has an author (it should)
+							if len(comment.Author.Login) > 0 {
+								// // use that login to see if this comment was from a team member
+								// authIdx := utils.FindIndexOf(comment.Author.Login, teamMemberIds)
+								// // if the comment was not from a team member, skip it
+								// if authIdx < 0 {
+								// 	continue
+								// }
+
+								// if the author isn't an owner of this repository, member of the organization
+								// that owns this repository, or collaborator on this repository then skip this
+								// comment
+								if comment.AuthorAssociation != "OWNER" &&
+									comment.AuthorAssociation != "MEMBER" &&
+									comment.AuthorAssociation != "COLLABORATOR" {
+									continue
+								}
+								// if get here, then we've found a comment from a member of the team,
+								// so use the time the comment was created to calculate a staleness
+								// value for this issue
+								if edge.Node.PullRequest.Closed {
+									// if the PR is closed, then use the time the PR was closed
+									// to determine hte staleness time
+									stalenessTime = edge.Node.PullRequest.ClosedAt.Time.Sub(comment.CreatedAt.Time)
+								} else {
+									// otherwise use the reference time
+									stalenessTime = refDateTime.Sub(comment.CreatedAt.Time)
+								}
+								break
+							}
+						}
+						// and append this first response time to the list of first response times
+						stalenessTimeList = append(stalenessTimeList, stalenessTime)
+						// if we found a comment from a member of the team, calculate the staleness time
 					}
 				}
 				// if we've reached the end of the list of contributions, break out of the loop
@@ -156,16 +210,16 @@ func getPrTimeToResStats() map[string]interface{} {
 		} // end of loop over queries
 	} // end of loop over organizations
 
-	// calculate the stats for the slice of PR time to resolution values
-	prAgeStats, numClosedPrs := utils.GetJsonDurationStats(resolutionTimeList)
+	// calculate the stats for the slice of PR staleness values
+	prStalenessTimeStats, numOpenPrs := utils.GetJsonDurationStats(stalenessTimeList)
 	// print a message indicating how many open PRs were found
-	if numClosedPrs == 0 {
-		fmt.Fprintf(os.Stderr, "\nWARN: No closed PRs found for the specified organization(s)\n")
+	if numOpenPrs == 0 {
+		fmt.Fprintf(os.Stderr, "\nWARN: No open PRs found for the specified organization(s)\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "\nFound %d closed PRs in repositories managed by the '%s' team between %s and %s\n", numClosedPrs,
-			teamName, startDateTimeStr, endDateTimeStr)
+		fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team on %s\n", numOpenPrs,
+			teamName, refDateTimeStr)
 	}
 	// add return the results as a map
-	return map[string]interface{}{"title": "PR Time to Resolution", "start": startDateTimeStr,
-		"end": endDateTimeStr, "seriesLength": numClosedPrs, "stats": prAgeStats}
+	return map[string]interface{}{"title": "Open PR Staleness Time", "refDate": refDateTimeStr,
+		"seriesLength": numOpenPrs, "stats": prStalenessTimeStats}
 }

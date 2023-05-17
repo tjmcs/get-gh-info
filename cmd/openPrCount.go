@@ -76,9 +76,10 @@ type prSearchEdges []struct {
 					Author    struct {
 						Login string
 					}
-					Body string
+					AuthorAssociation string
+					Body              string
 				}
-			} `graphql:"comments(first: 100, orderBy: {field: UPDATED_AT, direction: ASC})"`
+			} `graphql:"comments(first: 100, orderBy: $orderCommentsBy)"`
 		} `graphql:"... on PullRequest"`
 	}
 }
@@ -119,6 +120,7 @@ func getOpenPrCount() map[string]interface{} {
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
+	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
 	// and initialize a counter that will be used to count the number of open PRs
 	// in the named GitHub organization(s)
 	openPrCount := 0

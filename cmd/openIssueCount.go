@@ -76,9 +76,10 @@ type issueSearchEdges []struct {
 					Author    struct {
 						Login string
 					}
-					Body string
+					AuthorAssociation string
+					Body              string
 				}
-			} `graphql:"comments(first: 100, orderBy: {field: UPDATED_AT, direction: ASC})"`
+			} `graphql:"comments(first: 100, orderBy: $orderCommentsBy)"`
 		} `graphql:"... on Issue"`
 	}
 }
@@ -119,6 +120,7 @@ func getOpenIssueCount() map[string]interface{} {
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
+	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
 	// and initialize a counter that will be used to count the number of open issues
 	// in the named GitHub organization(s)
 	openIssueCount := 0

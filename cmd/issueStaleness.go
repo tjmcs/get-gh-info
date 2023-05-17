@@ -16,21 +16,22 @@ import (
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	getIssueAgeStatsCmd = &cobra.Command{
-		Use:   "openIssueAge",
-		Short: "Statistics for the 'age' of open isues",
+	getIssueStalenessStatsCmd = &cobra.Command{
+		Use:   "issueStaleness",
+		Short: "Statistics for the time since the last response for open PRs",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
-and maximum 'age' for all open issues in the named GitHub organizations in
-the defined time window (skipping issues that include the 'backlog' label
-and only counting issues in repositories that are managed by the named team)`,
+third quartile and maximum 'time since the last response' or 'staleness'
+for all closed issues in the named GitHub organizations and in the defined
+time window (skipping any issues that include the 'backlog' label and only
+counting issues in repositories that are managed by the named team)`,
 		Run: func(cmd *cobra.Command, args []string) {
-			utils.DumpMapAsJSON(getIssueAgeStats())
+			utils.DumpMapAsJSON(getIssueStalenessStats())
 		},
 	}
 )
 
 func init() {
-	repoCmd.AddCommand(getIssueAgeStatsCmd)
+	repoCmd.AddCommand(getIssueStalenessStatsCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -45,42 +46,49 @@ func init() {
 
 /*
  * define the function that is used to calculate the statistics associated with
- * the "age" of the open issues in the named GitHub organization(s); note that
- * this function skips open issues that include the 'backlog' label and only
- * includes first response times for issues in repositories that are managed by
- * the named team(s)
+ * the "staleness time" for any open issues in the named GitHub organization(s);
+ * note that this function skips open issues that include the 'backlog' label and only
+ * includes first response times for issues in repositories that are managed by the
+ * named team(s)
  */
-func getIssueAgeStats() map[string]interface{} {
+func getIssueStalenessStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// initialize the vars map that we'll use when making our query for PR review contributions
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
-	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
+	// vars["orderCommentsBy"] = githubv4.IssueCommentOrder{{field: UPDATED_AT, direction: DESC}}
+	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "DESC"}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
-	// retrieve reference time for our query window
+	// // and the details for members of the corresponding team
+	// _, teamMemberMap := utils.GetTeamMembers(teamName)
+	// // and from that map, construct list of member logins for that team
+	// teamMemberIds := utils.GetTeamMemberIds(teamMemberMap)
+
+	// retrieve the start and end time for our query window
 	_, refDateTime := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
 	refDateTimeStr := refDateTime.Format("2006-01-02")
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
-	issueAgeList := []time.Duration{}
+	stalenessTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define a couple of queries to run for each organization; the first is used to query
-		// for open issues and the second is used to query for closed issues that were closed
-		// after the end of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s", orgName, refDateTimeStr))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s", orgName, refDateTimeStr, refDateTimeStr))
+		// define a query for open issues that were created before the end of our time window; note
+		// that closed issues, by definition, cannot be stale
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s",
+			orgName, refDateTimeStr))
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s",
+			orgName, refDateTimeStr, refDateTimeStr))
 		queries := map[string]githubv4.String{
 			"open":   openQuery,
 			"closed": closedQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
-		for queryType, query := range queries {
+		for _, query := range queries {
 			// add the query string to use with this query to the vars map
 			vars["query"] = query
 			// initialize the flag that we use to determine if we're trying to retrieve
@@ -136,19 +144,55 @@ func getIssueAgeStats() map[string]interface{} {
 						}
 						// save the current issue's creation time
 						issueCreatedAt := edge.Node.Issue.CreatedAt
-						// if this is a closed issue
-						if queryType == "closed" {
-							// and if this issue closed before the reference time, then use that time to
-							// calculate the age of the issue and continue with the next issue
-							issueClosedAt := edge.Node.Issue.ClosedAt
-							if issueClosedAt.Before(refDateTime.Time) {
-								issueAgeList = append(issueAgeList, issueClosedAt.Sub(issueCreatedAt.Time))
+						// if we got this far, then the current repository is managed by the team we're interested in,
+						// so initialize a variable to store the default staleness time for this issue (here, the
+						// default is the time between the issue's creation and the end of our query window)
+						stalenessTime := refDateTime.Time.Sub(issueCreatedAt.Time)
+						// if no comments were found for this issue, then use the default staleness time
+						if len(edge.Node.Issue.Comments.Nodes) == 0 {
+							stalenessTimeList = append(stalenessTimeList, stalenessTime)
+							continue
+						}
+						// loop over the comments for this issue, looking for the first comment from a team member
+						for _, comment := range edge.Node.Issue.Comments.Nodes {
+							// if this comment was created after the reference time, then skip it
+							if comment.CreatedAt.After(refDateTime.Time) {
 								continue
 							}
+							// if the comment has an author (it should)
+							if len(comment.Author.Login) > 0 {
+								// // use that login to see if this comment was from a team member
+								// idx := utils.FindIndexOf(comment.Author.Login, teamMemberIds)
+								// // if the comment was not from a team member, skip it
+								// if idx < 0 {
+								// 	continue
+								// }
+
+								// if the author isn't an owner of this repository, member of the organization
+								// that owns this repository, or collaborator on this repository then skip this
+								// comment
+								if comment.AuthorAssociation != "OWNER" &&
+									comment.AuthorAssociation != "MEMBER" &&
+									comment.AuthorAssociation != "COLLABORATOR" {
+									continue
+								}
+								// if get here, then we've found a comment from a member of the team,
+								// so use the time the comment was created to calculate a staleness
+								// value for this issue
+								if edge.Node.Issue.Closed {
+									// if the issue is closed, then use the time the issue was closed
+									// to determine hte staleness time
+									stalenessTime = edge.Node.Issue.ClosedAt.Time.Sub(comment.CreatedAt.Time)
+								} else {
+									// otherwise use the reference time
+									stalenessTime = refDateTime.Sub(comment.CreatedAt.Time)
+								}
+								break
+							}
 						}
-						// otherwise, the issue is still open so use the end time of the query window
-						// to calculate the age of the issue
-						issueAgeList = append(issueAgeList, refDateTime.Time.Sub(issueCreatedAt.Time))
+						// and append this first response time to the list of first response times
+						stalenessTimeList = append(stalenessTimeList, stalenessTime)
+						// if we found a comment from a member of the team, calculate the staleness time
 					}
 				}
 				// if we've reached the end of the list of contributions, break out of the loop
@@ -165,9 +209,9 @@ func getIssueAgeStats() map[string]interface{} {
 		} // end of loop over queries
 	} // end of loop over organizations
 
-	// calculate the stats for the slice of issue age values
-	issueAgeStats, numOpenIssues := utils.GetJsonDurationStats(issueAgeList)
-	// print a message indicating how many open issues were found
+	// calculate the stats for the slice of issue staleness values
+	issueStalenessTimeStats, numOpenIssues := utils.GetJsonDurationStats(stalenessTimeList)
+	// print a message indicating how many open PRs were found
 	if numOpenIssues == 0 {
 		fmt.Fprintf(os.Stderr, "\nWARN: No open issues found for the specified organization(s)\n")
 	} else {
@@ -175,6 +219,6 @@ func getIssueAgeStats() map[string]interface{} {
 			teamName, refDateTimeStr)
 	}
 	// add return the results as a map
-	return map[string]interface{}{"title": "Open Issue Age", "refDate": refDateTimeStr,
-		"seriesLength": numOpenIssues, "stats": issueAgeStats}
+	return map[string]interface{}{"title": "Open Issue Staleness Time", "refDate": refDateTimeStr,
+		"seriesLength": numOpenIssues, "stats": issueStalenessTimeStats}
 }
