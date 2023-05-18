@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tjmcs/get-gh-info/cmd"
+	"github.com/tjmcs/get-gh-info/cmd/repo"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
@@ -31,7 +32,7 @@ by the named team)`,
 )
 
 func init() {
-	issuesCmd.AddCommand(getOpenIssuesCmd)
+	repo.IssuesCmd.AddCommand(getOpenIssuesCmd)
 
 	// Here you will define your flags and configuration settings.
 

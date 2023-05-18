@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tjmcs/get-gh-info/cmd"
+	"github.com/tjmcs/get-gh-info/cmd/repo"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
@@ -33,7 +34,7 @@ by the named team)`,
 )
 
 func init() {
-	pullsCmd.AddCommand(getFirstRespTimeStatsCmd)
+	repo.PullsCmd.AddCommand(getFirstRespTimeStatsCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -42,7 +43,7 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	getFirstRespTimeStatsCmd.Flags().BoolVarP(&restrictToTeam, "restrict-to-team", "r", false, "only count comments from immediate team members")
+	getFirstRespTimeStatsCmd.Flags().BoolVarP(&repo.RestrictToTeam, "restrict-to-team", "r", false, "only count comments from immediate team members")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
 	viper.BindPFlag("restrictToTeam", getFirstRespTimeStatsCmd.Flags().Lookup("restrict-to-team"))

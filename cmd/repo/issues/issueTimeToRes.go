@@ -13,26 +13,29 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tjmcs/get-gh-info/cmd"
+	"github.com/tjmcs/get-gh-info/cmd/repo"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	getAgeStatsCmd = &cobra.Command{
-		Use:   "age",
-		Short: "Statistics for the 'age' of open isues",
+	lookBackTime         string
+	getTimeToResStatsCmd = &cobra.Command{
+		Use:   "timeToResolution",
+		Short: "Statistics for the 'time to resolution' of open isues",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
-and maximum 'age' for all open issues in the named GitHub organizations in
-the defined time window (skipping issues that include the 'backlog' label
-and only counting issues in repositories that are managed by the named team)`,
+and maximum 'time to resolution' for all closed issues in the named GitHub
+organizations and in the defined time window (skipping any issues that include
+the 'backlog' label and only counting issues in repositories that are managed
+by the named team)`,
 		Run: func(cmd *cobra.Command, args []string) {
-			utils.DumpMapAsJSON(getAgeStats())
+			utils.DumpMapAsJSON(getTimeToResStats())
 		},
 	}
 )
 
 func init() {
-	issuesCmd.AddCommand(getAgeStatsCmd)
+	repo.IssuesCmd.AddCommand(getTimeToResStatsCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -41,18 +44,20 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
+	getTimeToResStatsCmd.Flags().StringVarP(&lookBackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
+	viper.BindPFlag("lookbackTime", getTimeToResStatsCmd.Flags().Lookup("lookback-time"))
 }
 
 /*
  * define the function that is used to calculate the statistics associated with
- * the "age" of the open issues in the named GitHub organization(s); note that
- * this function skips open issues that include the 'backlog' label and only
- * includes first response times for issues in repositories that are managed by
- * the named team(s)
+ * the "time to first response" for any open issues in the named GitHub organization(s);
+ * note that this function skips open issues that include the 'backlog' label and only
+ * includes first response times for issues in repositories that are managed by the
+ * named team(s)
  */
-func getAgeStats() map[string]interface{} {
+func getTimeToResStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// initialize the vars map that we'll use when making our query for PR review contributions
@@ -64,27 +69,26 @@ func getAgeStats() map[string]interface{} {
 	teamName, repositoryList := utils.GetTeamRepos()
 	// should we filter out private repositories?
 	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
-	// retrieve reference time for our query window
-	refDateTime, _ := utils.GetQueryTimeWindow()
+	// retrieve the start and end time for our query window
+	startDateTime, endDateTime := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
-	refDateTimeStr := refDateTime.Format("2006-01-02")
+	startDateTimeStr := startDateTime.Format("2006-01-02")
+	endDateTimeStr := endDateTime.Format("2006-01-02")
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
-	issueAgeList := []time.Duration{}
+	resolutionTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define a couple of queries to run for each organization; the first is used to query
-		// for open issues and the second is used to query for closed issues that were closed
-		// after the end of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s", orgName, refDateTimeStr))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s", orgName, refDateTimeStr, refDateTimeStr))
+		// define the query to run for each organization; the query searches for closed
+		// issues that were closed after the start of our time window
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog closed:%s..%s", orgName,
+			startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":   openQuery,
 			"closed": closedQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
-		for queryType, query := range queries {
+		for _, query := range queries {
 			// add the query string to use with this query to the vars map
 			vars["query"] = query
 			// initialize the flag that we use to determine if we're trying to retrieve
@@ -139,21 +143,12 @@ func getAgeStats() map[string]interface{} {
 						if (excludePrivateRepos && edge.Node.Issue.Repository.IsPrivate) || edge.Node.Issue.Repository.IsArchived {
 							continue
 						}
-						// save the current issue's creation time
+						// save the time when this issue was closed
+						issueClosedAt := edge.Node.Issue.ClosedAt
+						// then save the current issue's creation time
 						issueCreatedAt := edge.Node.Issue.CreatedAt
-						// if this is a closed issue
-						if queryType == "closed" {
-							// and if this issue closed before the reference time, then use that time to
-							// calculate the age of the issue and continue with the next issue
-							issueClosedAt := edge.Node.Issue.ClosedAt
-							if issueClosedAt.Before(refDateTime.Time) {
-								issueAgeList = append(issueAgeList, issueClosedAt.Sub(issueCreatedAt.Time))
-								continue
-							}
-						}
-						// otherwise, the issue is still open so use the end time of the query window
-						// to calculate the age of the issue
-						issueAgeList = append(issueAgeList, refDateTime.Time.Sub(issueCreatedAt.Time))
+						// and append the difference (the resolution time) to the list of resolution times
+						resolutionTimeList = append(resolutionTimeList, issueClosedAt.Time.Sub(issueCreatedAt.Time))
 					}
 				}
 				// if we've reached the end of the list of contributions, break out of the loop
@@ -170,16 +165,16 @@ func getAgeStats() map[string]interface{} {
 		} // end of loop over queries
 	} // end of loop over organizations
 
-	// calculate the stats for the slice of issue age values
-	issueAgeStats, numOpenIssues := utils.GetJsonDurationStats(issueAgeList)
-	// print a message indicating how many open issues were found
-	if numOpenIssues == 0 {
-		fmt.Fprintf(os.Stderr, "\nWARN: No open issues found for the specified organization(s)\n")
+	// calculate the stats for the slice of issue time to resolution values
+	prAgeStats, numClosedPrs := utils.GetJsonDurationStats(resolutionTimeList)
+	// print a message indicating how many open PRs were found
+	if numClosedPrs == 0 {
+		fmt.Fprintf(os.Stderr, "\nWARN: No closed issues found for the specified organization(s)\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team on %s\n", numOpenIssues,
-			teamName, refDateTimeStr)
+		fmt.Fprintf(os.Stderr, "\nFound %d closed issues in repositories managed by the '%s' team between %s and %s\n", numClosedPrs,
+			teamName, startDateTimeStr, endDateTimeStr)
 	}
 	// add return the results as a map
-	return map[string]interface{}{"title": "Open Issue Age", "refDate": refDateTimeStr,
-		"seriesLength": numOpenIssues, "stats": issueAgeStats}
+	return map[string]interface{}{"title": "Issue Time to Resolution", "start": startDateTimeStr,
+		"end": endDateTimeStr, "seriesLength": numClosedPrs, "stats": prAgeStats}
 }

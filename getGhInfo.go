@@ -5,8 +5,9 @@ package main
 
 import (
 	"github.com/tjmcs/get-gh-info/cmd"
-	_ "github.com/tjmcs/get-gh-info/cmd/issues"
-	_ "github.com/tjmcs/get-gh-info/cmd/pulls"
+	_ "github.com/tjmcs/get-gh-info/cmd/repo"
+	_ "github.com/tjmcs/get-gh-info/cmd/repo/issues"
+	_ "github.com/tjmcs/get-gh-info/cmd/repo/pulls"
 	_ "github.com/tjmcs/get-gh-info/cmd/user"
 )
 

@@ -1,7 +1,7 @@
 /*
 Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 */
-package cmd
+package repo
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tjmcs/get-gh-info/cmd"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
@@ -29,7 +30,7 @@ criteria passed in by the user from the named set of GitHub organizations.`,
 )
 
 func init() {
-	RootCmd.AddCommand(matchCmd)
+	cmd.RepoCmd.AddCommand(matchCmd)
 
 	// Here you will define your flags and configuration settings.
 

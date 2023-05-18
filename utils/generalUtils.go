@@ -161,16 +161,16 @@ func GetJsonDurationStats(data []time.Duration) (map[string]JsonDuration, int) {
 		// an even-length slice
 		if sliceLen%2 > 0 {
 			// if here, it's a odd length slice so things are easy
-			results["median"] = JsonDuration{data[sliceLen/2+1]}
-			results["firstQuartile"] = JsonDuration{data[sliceLen/4+1]}
-			results["thirdQuartile"] = JsonDuration{data[(sliceLen*3)/4+1]}
+			results["median"] = JsonDuration{data[sliceLen/2]}
+			results["firstQuartile"] = JsonDuration{data[sliceLen/4]}
+			results["thirdQuartile"] = JsonDuration{data[(sliceLen*3)/4]}
 		} else {
 			// if here, it's an even length slice so we have to do a little more work
 			// in this case the values we want are the average of the two values around
 			// where the actual value would be in an odd-length list
-			results["median"] = JsonDuration{(data[sliceLen/2] + data[sliceLen/2+1]) / 2}
-			results["firstQuartile"] = JsonDuration{(data[sliceLen/4] + data[sliceLen/4+1]) / 2}
-			results["thirdQuartile"] = JsonDuration{(data[(sliceLen*3)/4] + data[(sliceLen*3)/4+1]) / 2}
+			results["median"] = JsonDuration{(data[sliceLen/2-1] + data[sliceLen/2]) / 2}
+			results["firstQuartile"] = JsonDuration{(data[sliceLen/4-1] + data[sliceLen/4]) / 2}
+			results["thirdQuartile"] = JsonDuration{(data[(sliceLen*3)/4-1] + data[(sliceLen*3)/4]) / 2}
 		}
 	}
 	// finally, return the results

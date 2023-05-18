@@ -1,7 +1,7 @@
 /*
 Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 */
-package issues
+package repo
 
 import (
 	"github.com/spf13/cobra"
@@ -10,18 +10,15 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var (
-	// restrictToTeam is used in several subcommands to restrict the comments included
-	// as feedback to only those that are made by immediate team members
-	restrictToTeam bool
-	issuesCmd      = &cobra.Command{
-		Use:   "issues",
-		Short: "Gather issue-related data",
-		Long:  "The subcommand used as the root for all queries for issue-related data",
+	PullsCmd = &cobra.Command{
+		Use:   "pulls",
+		Short: "Gather PR-related data",
+		Long:  "The subcommand used as the root for all queries for PR-related data",
 	}
 )
 
 func init() {
-	cmd.RepoCmd.AddCommand(issuesCmd)
+	cmd.RepoCmd.AddCommand(PullsCmd)
 	// Here you will define your flags and configuration settings.
 
 	// Cobra supports Persistent Flags which will work for this command
