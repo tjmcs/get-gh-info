@@ -148,7 +148,9 @@ func GetJsonDurationStats(data []time.Duration) (map[string]JsonDuration, int) {
 		fallthrough
 	case 3:
 		// if three values, then the median is the middle value
-		results["median"] = JsonDuration{data[1]}
+		if sliceLen == 3 {
+			results["median"] = JsonDuration{data[1]}
+		}
 		// for either a two or three value slice, the median of lower
 		// half is the first value and the median of the second half is
 		// the last value

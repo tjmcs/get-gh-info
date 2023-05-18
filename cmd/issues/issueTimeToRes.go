@@ -1,7 +1,7 @@
 /*
 Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 */
-package cmd
+package issues
 
 import (
 	"context"
@@ -12,12 +12,14 @@ import (
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tjmcs/get-gh-info/cmd"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	getIssueTimeToResStatsCmd = &cobra.Command{
+	lookBackTime         string
+	getTimeToResStatsCmd = &cobra.Command{
 		Use:   "timeToResolution",
 		Short: "Statistics for the 'time to resolution' of open isues",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
@@ -26,13 +28,13 @@ organizations and in the defined time window (skipping any issues that include
 the 'backlog' label and only counting issues in repositories that are managed
 by the named team)`,
 		Run: func(cmd *cobra.Command, args []string) {
-			utils.DumpMapAsJSON(getIssueTimeToResStats())
+			utils.DumpMapAsJSON(getTimeToResStats())
 		},
 	}
 )
 
 func init() {
-	issuesCmd.AddCommand(getIssueTimeToResStatsCmd)
+	issuesCmd.AddCommand(getTimeToResStatsCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -41,10 +43,10 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	getIssueTimeToResStatsCmd.Flags().StringVarP(&duration, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
+	getTimeToResStatsCmd.Flags().StringVarP(&lookBackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("lookbackTime", getIssueTimeToResStatsCmd.Flags().Lookup("lookback-time"))
+	viper.BindPFlag("lookbackTime", getTimeToResStatsCmd.Flags().Lookup("lookback-time"))
 }
 
 /*
@@ -54,7 +56,7 @@ func init() {
  * includes first response times for issues in repositories that are managed by the
  * named team(s)
  */
-func getIssueTimeToResStats() map[string]interface{} {
+func getTimeToResStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// initialize the vars map that we'll use when making our query for PR review contributions
@@ -94,7 +96,7 @@ func getIssueTimeToResStats() map[string]interface{} {
 			// and a few other variables that we'll use to query the system for results
 			var err error
 			var edges issueSearchEdges
-			var pageInfo PageInfo
+			var pageInfo cmd.PageInfo
 			// loop over the pages of results from this query until we've reached the end
 			// of the list of issues that matched
 			for {

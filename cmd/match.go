@@ -29,7 +29,7 @@ criteria passed in by the user from the named set of GitHub organizations.`,
 )
 
 func init() {
-	repoCmd.AddCommand(matchCmd)
+	RootCmd.AddCommand(matchCmd)
 
 	// Here you will define your flags and configuration settings.
 

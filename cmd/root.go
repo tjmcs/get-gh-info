@@ -17,7 +17,7 @@ var (
 	outputFile string
 	orgList    string
 
-	rootCmd = &cobra.Command{
+	RootCmd = &cobra.Command{
 		Use:   "getGhInfo",
 		Short: "Gathers information from GitHub using the GitHub GraphQL API",
 		Long: `Gathers the requested information from GitHub using the GitHub GraphQL API
@@ -29,7 +29,7 @@ command-line or in an associated configuration file) and outputs the results`,
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {
-	err := rootCmd.Execute()
+	err := RootCmd.Execute()
 	if err != nil {
 		os.Exit(2)
 	}
@@ -41,15 +41,15 @@ func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
-	rootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "configuration file to use")
-	rootCmd.PersistentFlags().StringVarP(&outputFile, "file", "f", "", "file/stream for output (defaults to stdout)")
-	rootCmd.PersistentFlags().StringVarP(&orgList, "org-list", "o", "", "list of orgs to gather information from")
+	RootCmd.PersistentFlags().StringVarP(&cfgFile, "config", "c", "", "configuration file to use")
+	RootCmd.PersistentFlags().StringVarP(&outputFile, "file", "f", "", "file/stream for output (defaults to stdout)")
+	RootCmd.PersistentFlags().StringVarP(&orgList, "org-list", "o", "", "list of orgs to gather information from")
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("outputFile", rootCmd.PersistentFlags().Lookup("file"))
-	viper.BindPFlag("orgList", rootCmd.PersistentFlags().Lookup("org-list"))
+	viper.BindPFlag("outputFile", RootCmd.PersistentFlags().Lookup("file"))
+	viper.BindPFlag("orgList", RootCmd.PersistentFlags().Lookup("org-list"))
 }
 
 // initConfig reads in config file and ENV variables if set.

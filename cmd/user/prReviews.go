@@ -1,7 +1,7 @@
 /*
 Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 */
-package cmd
+package user
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
+	"github.com/tjmcs/get-gh-info/cmd"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
@@ -27,7 +28,7 @@ for each pull request submitted by that user.`,
 }
 
 func init() {
-	userCmd.AddCommand(prReviewsCmd)
+	cmd.UserCmd.AddCommand(prReviewsCmd)
 
 	// Here you will define your flags and configuration settings.
 

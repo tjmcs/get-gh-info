@@ -1,7 +1,7 @@
 /*
 Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 */
-package cmd
+package issues
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tjmcs/get-gh-info/cmd"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
@@ -87,7 +88,7 @@ type issueSearchEdges []struct {
 type issueSearchBody struct {
 	IssueCount githubv4.Int
 	Edges      issueSearchEdges
-	PageInfo   PageInfo
+	PageInfo   cmd.PageInfo
 }
 
 /*
@@ -160,7 +161,7 @@ func getOpenIssueCount() map[string]interface{} {
 			// and a few other variables that we'll use to query the system for results
 			var err error
 			var edges issueSearchEdges
-			var pageInfo PageInfo
+			var pageInfo cmd.PageInfo
 			// loop over the pages of results until we've reached the end of the list of open
 			// issues for this organization
 			for {

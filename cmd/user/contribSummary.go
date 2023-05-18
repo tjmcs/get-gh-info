@@ -1,7 +1,7 @@
 /*
 Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 */
-package cmd
+package user
 
 import (
 	"context"
@@ -12,6 +12,7 @@ import (
 	mapset "github.com/deckarep/golang-set"
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
+	"github.com/tjmcs/get-gh-info/cmd"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
@@ -30,7 +31,7 @@ in the named set of GitHub organizations.`,
 )
 
 func init() {
-	userCmd.AddCommand(contribSummaryCmd)
+	cmd.UserCmd.AddCommand(contribSummaryCmd)
 
 	// Here you will define your flags and configuration settings.
 

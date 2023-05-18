@@ -1,7 +1,7 @@
 /*
 Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 */
-package cmd
+package pulls
 
 import (
 	"context"
@@ -12,27 +12,28 @@ import (
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/tjmcs/get-gh-info/cmd"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	getIssueStalenessStatsCmd = &cobra.Command{
+	getStalenessStatsCmd = &cobra.Command{
 		Use:   "staleness",
 		Short: "Statistics for the time since the last response for open PRs",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
 third quartile and maximum 'time since the last response' or 'staleness'
-for all closed issues in the named GitHub organizations and in the defined
-time window (skipping any issues that include the 'backlog' label and only
-counting issues in repositories that are managed by the named team)`,
+for all closed PRs in the named GitHub organizations and in the defined
+time window (skipping any PRs that include the 'backlog' label and only
+counting PRs in repositories that are managed by the named team)`,
 		Run: func(cmd *cobra.Command, args []string) {
-			utils.DumpMapAsJSON(getIssueStalenessStats())
+			utils.DumpMapAsJSON(getStalenessStats())
 		},
 	}
 )
 
 func init() {
-	issuesCmd.AddCommand(getIssueStalenessStatsCmd)
+	pullsCmd.AddCommand(getStalenessStatsCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -41,27 +42,26 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	getIssueStalenessStatsCmd.Flags().BoolVarP(&restrictToTeam, "restrict-to-team", "r", false, "only count comments from immediate team members")
+	getStalenessStatsCmd.Flags().BoolVarP(&restrictToTeam, "restrict-to-team", "r", false, "only count comments from immediate team members")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("restrictToTeam", getIssueStalenessStatsCmd.Flags().Lookup("restrict-to-team"))
+	viper.BindPFlag("restrictToTeam", getStalenessStatsCmd.Flags().Lookup("restrict-to-team"))
 }
 
 /*
  * define the function that is used to calculate the statistics associated with
- * the "staleness time" for any open issues in the named GitHub organization(s);
- * note that this function skips open issues that include the 'backlog' label and only
- * includes first response times for issues in repositories that are managed by the
+ * the "staleness time" for any open PRs in the named GitHub organization(s);
+ * note that this function skips open PRs that include the 'backlog' label and only
+ * includes first response times for PRs in repositories that are managed by the
  * named team(s)
  */
-func getIssueStalenessStats() map[string]interface{} {
+func getStalenessStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// initialize the vars map that we'll use when making our query for PR review contributions
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
-	// vars["orderCommentsBy"] = githubv4.IssueCommentOrder{{field: UPDATED_AT, direction: DESC}}
 	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "DESC"}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
@@ -85,11 +85,13 @@ func getIssueStalenessStats() map[string]interface{} {
 	stalenessTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define a query for open issues that were created before the end of our time window; note
-		// that closed issues, by definition, cannot be stale
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s",
+		// define a couple of queries to run for each organization; the first is used to query
+		// for open PRs that were created before the end of our time window and the second is
+		// used to query for closed PRs that were both created before and closed after the end
+		// of our query window
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s",
 			orgName, refDateTimeStr))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s",
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s",
 			orgName, refDateTimeStr, refDateTimeStr))
 		queries := map[string]githubv4.String{
 			"open":   openQuery,
@@ -105,17 +107,17 @@ func getIssueStalenessStats() map[string]interface{} {
 			firstPage := true
 			// and a few other variables that we'll use to query the system for results
 			var err error
-			var edges issueSearchEdges
-			var pageInfo PageInfo
+			var edges prSearchEdges
+			var pageInfo cmd.PageInfo
 			// loop over the pages of results from this query until we've reached the end
-			// of the list of issues that matched
+			// of the list of PRs that matched
 			for {
 				// run our query and add the data we want from the query results to the
 				// repositoryList map
 				if firstPage {
-					err = client.Query(context.Background(), &firstIssueSearchQuery, vars)
+					err = client.Query(context.Background(), &firstPrSearchQuery, vars)
 				} else {
-					err = client.Query(context.Background(), &issueSearchQuery, vars)
+					err = client.Query(context.Background(), &prSearchQuery, vars)
 				}
 				if err != nil {
 					// Handle error.
@@ -125,23 +127,23 @@ func getIssueStalenessStats() map[string]interface{} {
 				// grab out the list of edges and the page info from the results of our search
 				// and loop over the edges
 				if firstPage {
-					edges = firstIssueSearchQuery.Search.Edges
-					pageInfo = firstIssueSearchQuery.Search.PageInfo
-					// set firstPage to false so that we'll use the issueSearchQuery struct
+					edges = firstPrSearchQuery.Search.Edges
+					pageInfo = firstPrSearchQuery.Search.PageInfo
+					// set firstPage to false so that we'll use the prSearchQuery struct
 					// (and it's "after" value) for subsequent queries
 					firstPage = false
 					fmt.Fprintf(os.Stderr, ".")
 				} else {
-					edges = issueSearchQuery.Search.Edges
-					pageInfo = issueSearchQuery.Search.PageInfo
+					edges = prSearchQuery.Search.Edges
+					pageInfo = prSearchQuery.Search.PageInfo
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
 					// if the current repository is managed by the team we're interested in, search for the first
 					// response from a member of the team and use the time of that response to calculate the time
-					// to first response value for this issue
-					if len(edge.Node.Issue.Repository.Name) > 0 {
-						orgAndRepoName := orgName + "/" + edge.Node.Issue.Repository.Name
+					// to first response value for this PR
+					if len(edge.Node.PullRequest.Repository.Name) > 0 {
+						orgAndRepoName := orgName + "/" + edge.Node.PullRequest.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
 						// if the current repository is not managed by the team we're interested in, skip it
 						if idx < 0 {
@@ -149,22 +151,22 @@ func getIssueStalenessStats() map[string]interface{} {
 						}
 						// if the repository associated with this issue is private and we're excluding
 						// private repositories or if it is archived, then skip it
-						if (excludePrivateRepos && edge.Node.Issue.Repository.IsPrivate) || edge.Node.Issue.Repository.IsArchived {
+						if (excludePrivateRepos && edge.Node.PullRequest.Repository.IsPrivate) || edge.Node.PullRequest.Repository.IsArchived {
 							continue
 						}
-						// save the current issue's creation time
-						issueCreatedAt := edge.Node.Issue.CreatedAt
-						// if we got this far, then the current repository is managed by the team we're interested in,
-						// so initialize a variable to store the default staleness time for this issue (here, the
-						// default is the time between the issue's creation and the end of our query window)
-						stalenessTime := refDateTime.Time.Sub(issueCreatedAt.Time)
-						// if no comments were found for this issue, then use the default staleness time
-						if len(edge.Node.Issue.Comments.Nodes) == 0 {
+						// save the current PR's creation time
+						prCreatedAt := edge.Node.PullRequest.CreatedAt
+						// if we got this far, then the current repository is managed by the team we're interested
+						// in, so initialize a variable to store the default staleness time for this PR (here, the
+						// default is the time between the PR's creation and the end of our query window)
+						stalenessTime := refDateTime.Time.Sub(prCreatedAt.Time)
+						// if no comments were found for this PR, then use the default staleness time
+						if len(edge.Node.PullRequest.Comments.Nodes) == 0 {
 							stalenessTimeList = append(stalenessTimeList, stalenessTime)
 							continue
 						}
-						// loop over the comments for this issue, looking for the first comment from a team member
-						for _, comment := range edge.Node.Issue.Comments.Nodes {
+						// loop over the comments for this PR, looking for the first comment from a team member
+						for _, comment := range edge.Node.PullRequest.Comments.Nodes {
 							// if this comment was created after the reference time, then skip it
 							if comment.CreatedAt.After(refDateTime.Time) {
 								continue
@@ -194,10 +196,10 @@ func getIssueStalenessStats() map[string]interface{} {
 								// if get here, then we've found a comment from a member of the team,
 								// so use the time the comment was created to calculate a staleness
 								// value for this issue
-								if edge.Node.Issue.Closed {
-									// if the issue is closed, then use the time the issue was closed
+								if edge.Node.PullRequest.Closed {
+									// if the PR is closed, then use the time the PR was closed
 									// to determine hte staleness time
-									stalenessTime = edge.Node.Issue.ClosedAt.Time.Sub(comment.CreatedAt.Time)
+									stalenessTime = edge.Node.PullRequest.ClosedAt.Time.Sub(comment.CreatedAt.Time)
 								} else {
 									// otherwise use the reference time
 									stalenessTime = refDateTime.Sub(comment.CreatedAt.Time)
@@ -224,16 +226,16 @@ func getIssueStalenessStats() map[string]interface{} {
 		} // end of loop over queries
 	} // end of loop over organizations
 
-	// calculate the stats for the slice of issue staleness values
-	issueStalenessTimeStats, numOpenIssues := utils.GetJsonDurationStats(stalenessTimeList)
+	// calculate the stats for the slice of PR staleness values
+	prStalenessTimeStats, numOpenPrs := utils.GetJsonDurationStats(stalenessTimeList)
 	// print a message indicating how many open PRs were found
-	if numOpenIssues == 0 {
-		fmt.Fprintf(os.Stderr, "\nWARN: No open issues found for the specified organization(s)\n")
+	if numOpenPrs == 0 {
+		fmt.Fprintf(os.Stderr, "\nWARN: No open PRs found for the specified organization(s)\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team on %s\n", numOpenIssues,
+		fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team on %s\n", numOpenPrs,
 			teamName, refDateTimeStr)
 	}
 	// add return the results as a map
-	return map[string]interface{}{"title": "Open Issue Staleness Time", "refDate": refDateTimeStr,
-		"seriesLength": numOpenIssues, "stats": issueStalenessTimeStats}
+	return map[string]interface{}{"title": "Open PR Staleness Time", "refDate": refDateTimeStr,
+		"seriesLength": numOpenPrs, "stats": prStalenessTimeStats}
 }

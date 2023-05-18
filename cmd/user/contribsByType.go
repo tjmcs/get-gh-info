@@ -1,10 +1,11 @@
 /*
 Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 */
-package cmd
+package user
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/tjmcs/get-gh-info/cmd"
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
@@ -22,7 +23,7 @@ against any of the repositories in the named set of GitHub organizations.`,
 )
 
 func init() {
-	userCmd.AddCommand(contribsByTypeCmd)
+	cmd.UserCmd.AddCommand(contribsByTypeCmd)
 
 	// Here you will define your flags and configuration settings.
 
