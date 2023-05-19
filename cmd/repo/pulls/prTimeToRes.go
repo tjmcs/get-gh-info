@@ -19,7 +19,6 @@ import (
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	lookBackTime         string
 	getTimeToResStatsCmd = &cobra.Command{
 		Use:   "timeToResolution",
 		Short: "Statistics for the time to first response of open isues",
@@ -44,7 +43,7 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	getTimeToResStatsCmd.Flags().StringVarP(&lookBackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
+	getTimeToResStatsCmd.Flags().StringVarP(&repo.LookbackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
 	viper.BindPFlag("lookbackTime", getTimeToResStatsCmd.Flags().Lookup("lookback-time"))

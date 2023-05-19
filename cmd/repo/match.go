@@ -36,13 +36,13 @@ func init() {
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	matchCmd.PersistentFlags().StringVarP(&searchPattern, "search-pattern", "p", "", "pattern to match against repository names")
+	matchCmd.Flags().StringVarP(&searchPattern, "search-pattern", "p", "", "pattern to match against repository names")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("searchPattern", matchCmd.PersistentFlags().Lookup("searchPattern"))
+	viper.BindPFlag("searchPattern", matchCmd.Flags().Lookup("searchPattern"))
 }
 
 /*
@@ -73,7 +73,7 @@ var repositorySearchQuery struct {
 func repoList() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
-	// initialize the vars map that we'll use when making our query for PR review contributions
+	// initialize the vars map that we'll use when making our query for matching repositories
 	vars := map[string]interface{}{
 		"type":  githubv4.SearchTypeRepository,
 		"first": githubv4.Int(100),

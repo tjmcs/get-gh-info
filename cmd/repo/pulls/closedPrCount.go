@@ -18,21 +18,21 @@ import (
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	getOpenPrsCmd = &cobra.Command{
-		Use:   "countOpen",
-		Short: "Count of open PRs in the named GitHub organization(s)",
-		Long: `Determines the number of open PRs in the named named GitHub organizations
+	getClosedPrsCmd = &cobra.Command{
+		Use:   "countClosed",
+		Short: "Count of closed PRs in the named GitHub organization(s)",
+		Long: `Determines the number of closed PRs in the named named GitHub organizations
 and in the defined time window (skipping any PRs that include the
 'backlog' label and only counting PRs in repositories that are managed
 by the named team)`,
 		Run: func(cmd *cobra.Command, args []string) {
-			utils.DumpMapAsJSON(getOpenPrCount())
+			utils.DumpMapAsJSON(getClosedPrCount())
 		},
 	}
 )
 
 func init() {
-	repo.PullsCmd.AddCommand(getOpenPrsCmd)
+	repo.PullsCmd.AddCommand(getClosedPrsCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -41,82 +41,19 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
+	getClosedPrsCmd.Flags().StringVarP(&repo.LookbackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
+	viper.BindPFlag("lookbackTime", getClosedPrsCmd.Flags().Lookup("lookback-time"))
 }
 
 /*
- * Define a few types that we can use to define (ane extract data from) the body of the GraphQL
- * query that will be used to retrieve the list of open PRs in the named GitHub organization(s)
- */
-type prSearchEdges []struct {
-	Cursor githubv4.String
-	Node   struct {
-		PullRequest struct {
-			CreatedAt  githubv4.DateTime
-			UpdatedAt  githubv4.DateTime
-			Closed     bool
-			ClosedAt   githubv4.DateTime
-			Title      string
-			Url        string
-			Repository struct {
-				Name       string
-				Url        string
-				IsPrivate  bool
-				IsArchived bool
-			}
-			Assignees struct {
-				Edges []struct {
-					Node struct {
-						Login string
-					}
-				}
-			} `graphql:"assignees(first: 10)"`
-			Comments struct {
-				Nodes []struct {
-					CreatedAt githubv4.DateTime
-					UpdatedAt githubv4.DateTime
-					Author    struct {
-						Login string
-					}
-					AuthorAssociation string
-					Body              string
-				}
-			} `graphql:"comments(first: 100, orderBy: $orderCommentsBy)"`
-		} `graphql:"... on PullRequest"`
-	}
-}
-type prSearchBody struct {
-	IssueCount githubv4.Int
-	Edges      prSearchEdges
-	PageInfo   cmd.PageInfo
-}
-
-/*
- * define a pair of structs that can be used to query GitHub for a list of all of the
- * open PRs in a given organization (by name) that match a given query; the first is
- * used to query for the first page of results and the second is used to query for
- * subsequent pages of results
- */
-var firstPrSearchQuery struct {
-	Search struct {
-		prSearchBody
-	} `graphql:"search(first: $first, query: $query, type: $type)"`
-}
-
-var prSearchQuery struct {
-	Search struct {
-		prSearchBody
-	} `graphql:"search(first: $first, after: $after, query: $query, type: $type)"`
-}
-
-/*
- * define the function that is used to count the number of open PRs in the
- * named GitHub organization(s); note that this function skips open PRs that
+ * define the function that is used to count the number of closed PRs in the
+ * named GitHub organization(s); note that this function skips closed PRs that
  * include the 'backlog' label and only counts PRs in repositories that are
  * managed by the named team(s)
  */
-func getOpenPrCount() map[string]interface{} {
+func getClosedPrCount() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// initialize the vars map that we'll use when making our query for PR review contributions
@@ -124,32 +61,31 @@ func getOpenPrCount() map[string]interface{} {
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
 	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
-	// and initialize a counter that will be used to count the number of open PRs
+	// and initialize a counter that will be used to count the number of closed PRs
 	// in the named GitHub organization(s)
-	openPrCount := 0
+	closedPrCount := 0
 	// and initialize a map that will be used to store counts for each of the named organizations
 	// and a total count
-	openPrCountMap := map[string]interface{}{}
+	closedPrCountMap := map[string]interface{}{}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
 	// should we filter out private repositories?
 	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
-	// define the start and end time of our query window
-	refDateTime, _ := utils.GetQueryTimeWindow()
-	// retrieve the reference time for our query window
-	refDateTimeStr := refDateTime.Format("2006-01-02")
+	// retrieve the start and end time for our query window
+	startDateTime, endDateTime := utils.GetQueryTimeWindow()
+	// save date strings for use in output (below)
+	startDateTimeStr := startDateTime.Format("2006-01-02")
+	endDateTimeStr := endDateTime.Format("2006-01-02")
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// initialize a counter for the number of open PRs in the current organization
-		orgOpenPrCount := 0
-		// define a couple of queries to run for each organization; the first is used to query
-		// for open PRs that were created before the end of our time window and the second is
-		// used to query for closed PRs that were both created before and closed after the end
-		// of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s", orgName, refDateTimeStr))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s", orgName, refDateTimeStr, refDateTimeStr))
+		// initialize a counter for the number of closed PRs in the current organization
+		orgClosedPrCount := 0
+		// define the query to run for each organization; the query searches for closed
+		// PRs that were closed after the start of our time window and before the end
+		// of our time window
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog closed:%s..%s", orgName,
+			startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":   openQuery,
 			"closed": closedQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
@@ -163,7 +99,7 @@ func getOpenPrCount() map[string]interface{} {
 			var err error
 			var edges prSearchEdges
 			var pageInfo cmd.PageInfo
-			// loop over the pages of results until we've reached the end of the list of open
+			// loop over the pages of results until we've reached the end of the list of closed
 			// PRs for this organization
 			for {
 				// set the "after" field to our current "lastCursor" value
@@ -195,7 +131,7 @@ func getOpenPrCount() map[string]interface{} {
 				}
 				for _, edge := range edges {
 					// if the current repository is managed by the team we're interested in, then increment the
-					// open PR count for the current organization
+					// closed PR count for the current organization
 					if len(edge.Node.PullRequest.Repository.Name) > 0 {
 						orgAndRepoName := orgName + "/" + edge.Node.PullRequest.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
@@ -203,13 +139,13 @@ func getOpenPrCount() map[string]interface{} {
 						if idx < 0 {
 							continue
 						}
-						// if the repository associated with this issue is private and we're excluding
+						// if the repository associated with this PR is private and we're excluding
 						// private repositories or if it is archived, then skip it
 						if (excludePrivateRepos && edge.Node.PullRequest.Repository.IsPrivate) || edge.Node.PullRequest.Repository.IsArchived {
 							continue
 						}
-						orgOpenPrCount++
-						openPrCount++
+						orgClosedPrCount++
+						closedPrCount++
 					}
 				}
 				// if we've reached the end of the list of contributions, break out of the loop
@@ -223,12 +159,15 @@ func getOpenPrCount() map[string]interface{} {
 			delete(vars, "after")
 		} // end of loop over queries
 
-		// add the open PR count for the current organization to the openPrCountMap
-		openPrCountMap[orgName] = orgOpenPrCount
+		// add the closed PR count for the current organization to the closedPrCountMap
+		closedPrCountMap[orgName] = orgClosedPrCount
 	}
-	// add the total open PR count to the openPrCountMap
-	openPrCountMap["total"] = openPrCount
-	fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team on %s\n", openPrCount,
-		teamName, refDateTimeStr)
-	return map[string]interface{}{"title": "Open PR Counts", "refDate": refDateTimeStr, "counts": openPrCountMap}
+	// add the total closed PR count to the closedPrCountMap
+	closedPrCountMap["total"] = closedPrCount
+	// print a message indicating the total number of closed PRs found
+	fmt.Fprintf(os.Stderr, "\nFound %d closed PRs in repositories managed by the '%s' team between %s and %s\n", closedPrCount,
+		teamName, startDateTimeStr, endDateTimeStr)
+	// and return the closed PR counts as a map
+	return map[string]interface{}{"title": "Closed PR Counts", "start": startDateTimeStr,
+		"end": endDateTimeStr, "counts": closedPrCountMap}
 }

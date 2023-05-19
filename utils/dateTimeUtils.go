@@ -98,10 +98,10 @@ func GetQueryTimeWindow() (githubv4.DateTime, githubv4.DateTime) {
 	showCompleteWeeksOnly := viper.GetBool("completeWeeks")
 	// first, get the date to start looking back from (this value should
 	// have been passed in on the command-line, but defaults to the empty string)
-	referenceDate := viper.Get("referenceDate").(string)
+	referenceDate := viper.GetString("referenceDate")
 	// next, look for the "lookbackTime" value that we should use (this value can
 	// be passed in on the command-line, but defaults to the empty string)
-	lookBackStr := viper.Get("lookbackTime").(string)
+	lookBackStr := viper.GetString("lookbackTime")
 	if referenceDate != "" {
 		dateTime, err := time.Parse("2006-01-02", referenceDate)
 		if err != nil {

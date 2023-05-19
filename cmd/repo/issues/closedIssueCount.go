@@ -18,21 +18,21 @@ import (
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	getOpenIssuesCmd = &cobra.Command{
-		Use:   "countOpen",
-		Short: "Count of open issues in the named GitHub organization(s)",
-		Long: `Determines the number of open issues in the named GitHub organizations
+	getClosedIssuesCmd = &cobra.Command{
+		Use:   "countClosed",
+		Short: "Count of closed issues in the named GitHub organization(s)",
+		Long: `Determines the number of closed issues in the named GitHub organizations
 and in the defined time window (skipping any issues that include the
 'backlog' label and only counting issues in repositories that are managed
 by the named team)`,
 		Run: func(cmd *cobra.Command, args []string) {
-			utils.DumpMapAsJSON(getOpenIssueCount())
+			utils.DumpMapAsJSON(getClosedIssueCount())
 		},
 	}
 )
 
 func init() {
-	repo.IssuesCmd.AddCommand(getOpenIssuesCmd)
+	repo.IssuesCmd.AddCommand(getClosedIssuesCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -41,115 +41,51 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
+	getClosedIssuesCmd.Flags().StringVarP(&repo.LookbackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
+	viper.BindPFlag("lookbackTime", getClosedIssuesCmd.Flags().Lookup("lookback-time"))
 }
 
 /*
- * Define a few types that we can use to define (ane extract data from) the body of the GraphQL
- * query that will be used to retrieve the list of open issues in the named GitHub organization(s)
- */
-type issueSearchEdges []struct {
-	Cursor githubv4.String
-	Node   struct {
-		Issue struct {
-			CreatedAt  githubv4.DateTime
-			UpdatedAt  githubv4.DateTime
-			Closed     bool
-			ClosedAt   githubv4.DateTime
-			Title      string
-			Url        string
-			Repository struct {
-				Name       string
-				Url        string
-				IsPrivate  bool
-				IsArchived bool
-			}
-			Assignees struct {
-				Edges []struct {
-					Node struct {
-						Login string
-					}
-				}
-			} `graphql:"assignees(first: 10)"`
-			Comments struct {
-				Nodes []struct {
-					CreatedAt githubv4.DateTime
-					UpdatedAt githubv4.DateTime
-					Author    struct {
-						Login string
-					}
-					AuthorAssociation string
-					Body              string
-				}
-			} `graphql:"comments(first: 100, orderBy: $orderCommentsBy)"`
-		} `graphql:"... on Issue"`
-	}
-}
-type issueSearchBody struct {
-	IssueCount githubv4.Int
-	Edges      issueSearchEdges
-	PageInfo   cmd.PageInfo
-}
-
-/*
- * define a pair of structs that can be used to query GitHub for a list of all of the
- * open PRs in a given organization (by name) that match a given query; the first is
- * used to query for the first page of results and the second is used to query for
- * subsequent pages of results
- */
-var firstIssueSearchQuery struct {
-	Search struct {
-		issueSearchBody
-	} `graphql:"search(first: $first, query: $query, type: $type)"`
-}
-
-var issueSearchQuery struct {
-	Search struct {
-		issueSearchBody
-	} `graphql:"search(first: $first, after: $after, query: $query, type: $type)"`
-}
-
-/*
- * define the function that is used to count the number of open issues in the
- * named GitHub organization(s); note that this function skips open issues that
+ * define the function that is used to count the number of closed issues in the
+ * named GitHub organization(s); note that this function skips closed issues that
  * include the 'backlog' label and only counts issues in repositories that are
  * managed by the named team(s)
  */
-func getOpenIssueCount() map[string]interface{} {
+func getClosedIssueCount() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
-	// initialize the vars map that we'll use when making our query for PR review contributions
+	// initialize the vars map that we'll use when making our query for closed issues
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
 	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
-	// and initialize a counter that will be used to count the number of open issues
+	// and initialize a counter that will be used to count the number of closed issues
 	// in the named GitHub organization(s)
-	openIssueCount := 0
+	closedIssueCount := 0
 	// and initialize a map that will be used to store counts for each of the named organizations
 	// and a total count
-	openIssueCountMap := map[string]interface{}{}
+	closedIssueCountMap := map[string]interface{}{}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
 	// should we filter out private repositories?
 	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
-	// retrieve the reference time for our query window
-	refDateTime, _ := utils.GetQueryTimeWindow()
+	// retrieve the start and end time for our query window
+	startDateTime, endDateTime := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
-	refDateTimeStr := refDateTime.Format("2006-01-02")
+	startDateTimeStr := startDateTime.Format("2006-01-02")
+	endDateTimeStr := endDateTime.Format("2006-01-02")
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// initialize a counter for the number of open issues in the current organization
-		orgOpenIssueCount := 0
-		// define a couple of queries to run for each organization; the first is used to query
-		// for open PRs that were created before the end of our time window and the second is
-		// used to query for closed PRs that were both created before and closed after the end
-		// of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s", orgName, refDateTimeStr))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s", orgName, refDateTimeStr, refDateTimeStr))
+		// initialize a counter for the number of closed issues in the current organization
+		orgClosedIssueCount := 0
+		// define the query to run for each organization; the query searches for closed
+		// issues that were closed after the start of our time window and before the end
+		// of our time window
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog closed:%s..%s", orgName,
+			startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":   openQuery,
 			"closed": closedQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
@@ -163,7 +99,7 @@ func getOpenIssueCount() map[string]interface{} {
 			var err error
 			var edges issueSearchEdges
 			var pageInfo cmd.PageInfo
-			// loop over the pages of results until we've reached the end of the list of open
+			// loop over the pages of results until we've reached the end of the list of closed
 			// issues for this organization
 			for {
 				// set the "after" field to our current "lastCursor" value
@@ -195,7 +131,7 @@ func getOpenIssueCount() map[string]interface{} {
 				}
 				for _, edge := range edges {
 					// if the current repository is managed by the team we're interested in, then increment the
-					// open issue count for the current organization
+					// closed issue count for the current organization
 					if len(edge.Node.Issue.Repository.Name) > 0 {
 						orgAndRepoName := orgName + "/" + edge.Node.Issue.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
@@ -208,8 +144,8 @@ func getOpenIssueCount() map[string]interface{} {
 						if (excludePrivateRepos && edge.Node.Issue.Repository.IsPrivate) || edge.Node.Issue.Repository.IsArchived {
 							continue
 						}
-						orgOpenIssueCount++
-						openIssueCount++
+						orgClosedIssueCount++
+						closedIssueCount++
 					}
 				}
 				// if we've reached the end of the list of contributions, break out of the loop
@@ -223,14 +159,15 @@ func getOpenIssueCount() map[string]interface{} {
 			delete(vars, "after")
 		} // end of loop over queries
 
-		// add the open issue count for the current organization to the openIssueCountMap
-		openIssueCountMap[orgName] = orgOpenIssueCount
+		// add the closed issue count for the current organization to the closedIssueCountMap
+		closedIssueCountMap[orgName] = orgClosedIssueCount
 	}
-	// add the total open issue count to the openIssueCountMap
-	openIssueCountMap["total"] = openIssueCount
-	// print a message indicating the total number of open issues found
-	fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team on %s\n", openIssueCount,
-		teamName, refDateTimeStr)
-	// and return the open issue counts as a map
-	return map[string]interface{}{"title": "Open Issue Counts", "refDate": refDateTimeStr, "counts": openIssueCountMap}
+	// add the total closed issue count to the closedIssueCountMap
+	closedIssueCountMap["total"] = closedIssueCount
+	// print a message indicating the total number of closed issues found
+	fmt.Fprintf(os.Stderr, "\nFound %d closed issues in repositories managed by the '%s' team between %s and %s\n", closedIssueCount,
+		teamName, startDateTimeStr, endDateTimeStr)
+	// and return the closed issue counts as a map
+	return map[string]interface{}{"title": "Closed Issue Counts", "start": startDateTimeStr,
+		"end": endDateTimeStr, "counts": closedIssueCountMap}
 }

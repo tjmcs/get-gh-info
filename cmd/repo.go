@@ -36,17 +36,17 @@ func init() {
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	RootCmd.PersistentFlags().StringVarP(&compTeam, "team", "t", "", "name of team to gather data for")
-	RootCmd.PersistentFlags().StringVarP(&referenceDate, "ref-date", "d", "", "reference date for time window (YYYY-MM-DD)")
-	RootCmd.PersistentFlags().BoolVarP(&completeWeeks, "complete-weeks", "w", false, "only output complete weeks (starting Monday)")
-	RootCmd.PersistentFlags().BoolVarP(&excludePrivate, "exclude-private-repos", "e", false, "exclude private repositories from output")
+	RepoCmd.PersistentFlags().StringVarP(&compTeam, "team", "t", "", "name of team to gather data for")
+	RepoCmd.PersistentFlags().StringVarP(&referenceDate, "ref-date", "d", "", "reference date for time window (YYYY-MM-DD)")
+	RepoCmd.PersistentFlags().BoolVarP(&completeWeeks, "complete-weeks", "w", false, "only output complete weeks (starting Monday)")
+	RepoCmd.PersistentFlags().BoolVarP(&excludePrivate, "exclude-private-repos", "e", false, "exclude private repositories from output")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("teamName", RootCmd.PersistentFlags().Lookup("team"))
-	viper.BindPFlag("referenceDate", RootCmd.PersistentFlags().Lookup("ref-date"))
-	viper.BindPFlag("completeWeeks", RootCmd.PersistentFlags().Lookup("complete-weeks"))
-	viper.BindPFlag("excludePrivateRepos", RootCmd.PersistentFlags().Lookup("exclude-private-repos"))
+	viper.BindPFlag("teamName", RepoCmd.PersistentFlags().Lookup("team"))
+	viper.BindPFlag("referenceDate", RepoCmd.PersistentFlags().Lookup("ref-date"))
+	viper.BindPFlag("completeWeeks", RepoCmd.PersistentFlags().Lookup("complete-weeks"))
+	viper.BindPFlag("excludePrivateRepos", RepoCmd.PersistentFlags().Lookup("exclude-private-repos"))
 }

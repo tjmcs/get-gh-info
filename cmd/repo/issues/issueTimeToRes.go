@@ -19,7 +19,6 @@ import (
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	lookBackTime         string
 	getTimeToResStatsCmd = &cobra.Command{
 		Use:   "timeToResolution",
 		Short: "Statistics for the 'time to resolution' of open isues",
@@ -44,7 +43,7 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	getTimeToResStatsCmd.Flags().StringVarP(&lookBackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
+	getTimeToResStatsCmd.Flags().StringVarP(&repo.LookbackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
 	viper.BindPFlag("lookbackTime", getTimeToResStatsCmd.Flags().Lookup("lookback-time"))
@@ -60,7 +59,7 @@ func init() {
 func getTimeToResStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
-	// initialize the vars map that we'll use when making our query for PR review contributions
+	// initialize the vars map that we'll use when making our query for issue
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
@@ -80,7 +79,8 @@ func getTimeToResStats() map[string]interface{} {
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
 		// define the query to run for each organization; the query searches for closed
-		// issues that were closed after the start of our time window
+		// issues that were closed after the start of our time window and before the end
+		// of our time window
 		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog closed:%s..%s", orgName,
 			startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
@@ -166,15 +166,15 @@ func getTimeToResStats() map[string]interface{} {
 	} // end of loop over organizations
 
 	// calculate the stats for the slice of issue time to resolution values
-	prAgeStats, numClosedPrs := utils.GetJsonDurationStats(resolutionTimeList)
-	// print a message indicating how many open PRs were found
-	if numClosedPrs == 0 {
+	prAgeStats, numClosedIssues := utils.GetJsonDurationStats(resolutionTimeList)
+	// print a message indicating how many open issues were found
+	if numClosedIssues == 0 {
 		fmt.Fprintf(os.Stderr, "\nWARN: No closed issues found for the specified organization(s)\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "\nFound %d closed issues in repositories managed by the '%s' team between %s and %s\n", numClosedPrs,
+		fmt.Fprintf(os.Stderr, "\nFound %d closed issues in repositories managed by the '%s' team between %s and %s\n", numClosedIssues,
 			teamName, startDateTimeStr, endDateTimeStr)
 	}
 	// add return the results as a map
 	return map[string]interface{}{"title": "Issue Time to Resolution", "start": startDateTimeStr,
-		"end": endDateTimeStr, "seriesLength": numClosedPrs, "stats": prAgeStats}
+		"end": endDateTimeStr, "seriesLength": numClosedIssues, "stats": prAgeStats}
 }
