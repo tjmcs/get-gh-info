@@ -135,22 +135,29 @@ func getOpenIssueCount() map[string]interface{} {
 	// should we filter out private repositories?
 	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
 	// retrieve the reference time for our query window
-	refDateTime, _ := utils.GetQueryTimeWindow()
+	startDateTime, endDateTime := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
-	refDateTimeStr := refDateTime.Format("2006-01-02")
+	startDateTimeStr := startDateTime.Format("2006-01-02")
+	endDateTimeStr := endDateTime.Format("2006-01-02")
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
 		// initialize a counter for the number of open issues in the current organization
 		orgOpenIssueCount := 0
-		// define a couple of queries to run for each organization; the first is used to query
-		// for open PRs that were created before the end of our time window and the second is
-		// used to query for closed PRs that were both created before and closed after the end
-		// of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s", orgName, refDateTimeStr))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s", orgName, refDateTimeStr, refDateTimeStr))
+		// define a few queries to run for each organization; the first is used to query
+		// for open issues that were created before the end of our time window, the second is
+		// used to query for closed issues that were created before and closed after the end
+		// of our query window, and the third for closed issues that were created after the
+		// start of and closed before the end of our query window
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s",
+			orgName, endDateTimeStr))
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s",
+			orgName, endDateTimeStr, endDateTimeStr))
+		interimQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:%s..%s closed:%s..%s",
+			orgName, startDateTimeStr, endDateTimeStr, startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":   openQuery,
-			"closed": closedQuery,
+			"open":    openQuery,
+			"closed":  closedQuery,
+			"interim": interimQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
@@ -229,8 +236,8 @@ func getOpenIssueCount() map[string]interface{} {
 	// add the total open issue count to the openIssueCountMap
 	openIssueCountMap["total"] = openIssueCount
 	// print a message indicating the total number of open issues found
-	fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team on %s\n", openIssueCount,
-		teamName, refDateTimeStr)
+	fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team between %s and %s\n", openIssueCount,
+		teamName, startDateTimeStr, endDateTimeStr)
 	// and return the open issue counts as a map
-	return map[string]interface{}{"title": "Open Issue Counts", "refDate": refDateTimeStr, "counts": openIssueCountMap}
+	return map[string]interface{}{"title": "Open Issue Counts", "start": startDateTimeStr, "end": endDateTimeStr, "counts": openIssueCountMap}
 }

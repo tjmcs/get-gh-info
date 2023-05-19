@@ -79,27 +79,34 @@ func getStalenessStats() map[string]interface{} {
 		teamMemberIds = utils.GetTeamMemberIds(teamMemberMap)
 	}
 	// retrieve the reference time for our query window
-	refDateTime, _ := utils.GetQueryTimeWindow()
+	startDateTime, endDateTime := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
-	refDateTimeStr := refDateTime.Format("2006-01-02")
+	startDateTimeStr := startDateTime.Format("2006-01-02")
+	endDateTimeStr := endDateTime.Format("2006-01-02")
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	stalenessTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define a query for open issues that were created before the end of our time window; note
-		// that closed issues, by definition, cannot be stale
+		// define a few queries to run for each organization; the first is used to query
+		// for open issues that were created before the end of our time window, the second is
+		// used to query for closed issues that were created before and closed after the end
+		// of our query window, and the third for closed issues that were created after the
+		// start of and closed before the end of our query window
 		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s",
-			orgName, refDateTimeStr))
+			orgName, endDateTimeStr))
 		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s",
-			orgName, refDateTimeStr, refDateTimeStr))
+			orgName, endDateTimeStr, endDateTimeStr))
+		interimQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:%s..%s closed:%s..%s",
+			orgName, startDateTimeStr, endDateTimeStr, startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":   openQuery,
-			"closed": closedQuery,
+			"open":    openQuery,
+			"closed":  closedQuery,
+			"interim": interimQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
-		for _, query := range queries {
+		for queryType, query := range queries {
 			// add the query string to use with this query to the vars map
 			vars["query"] = query
 			// initialize the flag that we use to determine if we're trying to retrieve
@@ -157,9 +164,16 @@ func getStalenessStats() map[string]interface{} {
 						// save the current issue's creation time
 						issueCreatedAt := edge.Node.Issue.CreatedAt
 						// if we got this far, then the current repository is managed by the team we're interested in,
-						// so initialize a variable to store the default staleness time for this issue (here, the
-						// default is the time between the issue's creation and the end of our query window)
-						stalenessTime := refDateTime.Time.Sub(issueCreatedAt.Time)
+						// so look for the time since we last had a response from a member of the team; first, initialize
+						// a variable to hold the difference between either the time the issue was closed (for interim
+						// queries) or the end of our query window (for other query types) and the creation time for
+						// this issue
+						var stalenessTime time.Duration
+						if queryType == "interim" {
+							stalenessTime = edge.Node.Issue.ClosedAt.Time.Sub(issueCreatedAt.Time)
+						} else {
+							stalenessTime = endDateTime.Time.Sub(issueCreatedAt.Time)
+						}
 						// if no comments were found for this issue, then use the default staleness time
 						if len(edge.Node.Issue.Comments.Nodes) == 0 {
 							stalenessTimeList = append(stalenessTimeList, stalenessTime)
@@ -168,7 +182,7 @@ func getStalenessStats() map[string]interface{} {
 						// loop over the comments for this issue, looking for the first comment from a team member
 						for _, comment := range edge.Node.Issue.Comments.Nodes {
 							// if this comment was created after the reference time, then skip it
-							if comment.CreatedAt.After(refDateTime.Time) {
+							if comment.CreatedAt.After(endDateTime.Time) {
 								continue
 							}
 							// if the comment has an author (it should)
@@ -193,16 +207,24 @@ func getStalenessStats() map[string]interface{} {
 										continue
 									}
 								}
+								// if the comment was created after the end of our query window (or if it's an
+								// interim query and the comment was created after the issue was closed), then
+								// we've reached the end of the time where a user could have responded within our
+								// time window, so just use the default we defined (above)
+								if (queryType == "interim" && comment.CreatedAt.After(edge.Node.Issue.ClosedAt.Time)) ||
+									comment.CreatedAt.After(endDateTime.Time) {
+									break
+								}
 								// if get here, then we've found a comment from a member of the team,
 								// so use the time the comment was created to calculate a staleness
 								// value for this issue
 								if edge.Node.Issue.Closed {
 									// if the issue is closed, then use the time the issue was closed
-									// to determine hte staleness time
+									// to determine the staleness time
 									stalenessTime = edge.Node.Issue.ClosedAt.Time.Sub(comment.CreatedAt.Time)
 								} else {
 									// otherwise use the reference time
-									stalenessTime = refDateTime.Sub(comment.CreatedAt.Time)
+									stalenessTime = endDateTime.Sub(comment.CreatedAt.Time)
 								}
 								break
 							}
@@ -232,10 +254,10 @@ func getStalenessStats() map[string]interface{} {
 	if numOpenIssues == 0 {
 		fmt.Fprintf(os.Stderr, "\nWARN: No open issues found for the specified organization(s)\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team on %s\n", numOpenIssues,
-			teamName, refDateTimeStr)
+		fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team between %s and %s\n", numOpenIssues,
+			teamName, startDateTimeStr, endDateTimeStr)
 	}
 	// add return the results as a map
-	return map[string]interface{}{"title": "Open Issue Staleness Time", "refDate": refDateTimeStr,
+	return map[string]interface{}{"title": "Open Issue Staleness Time", "start": startDateTimeStr, "end": endDateTimeStr,
 		"seriesLength": numOpenIssues, "stats": issueStalenessTimeStats}
 }

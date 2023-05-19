@@ -41,10 +41,8 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	getClosedIssuesCmd.Flags().StringVarP(&repo.LookbackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("lookbackTime", getClosedIssuesCmd.Flags().Lookup("lookback-time"))
 }
 
 /*

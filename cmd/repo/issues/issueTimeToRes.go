@@ -43,10 +43,10 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	getTimeToResStatsCmd.Flags().StringVarP(&repo.LookbackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
+	getTimeToResStatsCmd.Flags().BoolVarP(&repo.RestrictToTeam, "restrict-to-team", "r", false, "only count comments from immediate team members")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("lookbackTime", getTimeToResStatsCmd.Flags().Lookup("lookback-time"))
+	viper.BindPFlag("restrictToTeam", getTimeToResStatsCmd.Flags().Lookup("restrict-to-team"))
 }
 
 /*
@@ -78,9 +78,11 @@ func getTimeToResStats() map[string]interface{} {
 	resolutionTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define the query to run for each organization; the query searches for closed
-		// issues that were closed after the start of our time window and before the end
-		// of our time window
+		// define a few queries to run for each organization; the first is used to query
+		// for open issues that were created before the end of our time window, the second is
+		// used to query for closed issues that were created before and closed after the end
+		// of our query window, and the third for closed issues that were created after the
+		// start of and closed before the end of our query window
 		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog closed:%s..%s", orgName,
 			startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
