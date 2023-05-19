@@ -163,6 +163,10 @@ func getStalenessStats() map[string]interface{} {
 						}
 						// save the current issue's creation time
 						issueCreatedAt := edge.Node.Issue.CreatedAt
+						// if the is issue was created after the end of our time window, then skip it
+						if endDateTime.Before(issueCreatedAt.Time) {
+							continue
+						}
 						// if we got this far, then the current repository is managed by the team we're interested in,
 						// so look for the time since we last had a response from a member of the team; first, initialize
 						// a variable to hold the difference between either the time the issue was closed (for interim

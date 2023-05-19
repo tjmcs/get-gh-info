@@ -162,6 +162,10 @@ func getFirstRespTimeStats() map[string]interface{} {
 						}
 						// save the current issue's creation time
 						issueCreatedAt := edge.Node.Issue.CreatedAt
+						// if the is issue was created after the end of our time window, then skip it
+						if endDateTime.Before(issueCreatedAt.Time) {
+							continue
+						}
 						// if we got this far, then the current repository is managed by the team we're interested in,
 						// so look for the first response from a member of the team; first, initialize a variable to
 						// hold the difference between either the time the issue was closed (for interim queries) or
@@ -209,7 +213,6 @@ func getFirstRespTimeStats() map[string]interface{} {
 									comment.CreatedAt.After(endDateTime.Time) {
 									break
 								}
-
 								// if get here, then we've found a comment from a member of the team that was
 								// created before the end of our query window, so calculate the time to first
 								// response and break out of the loop

@@ -150,6 +150,10 @@ func getAgeStats() map[string]interface{} {
 						}
 						// save the current issue's creation time
 						issueCreatedAt := edge.Node.Issue.CreatedAt
+						// if the is issue was created after the end of our time window, then skip it
+						if endDateTime.Before(issueCreatedAt.Time) {
+							continue
+						}
 						// if this is a closed issue
 						if edge.Node.Issue.Closed {
 							// and if this issue closed before the reference time, then use that time to

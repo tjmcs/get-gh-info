@@ -142,6 +142,10 @@ func getClosedIssueCount() map[string]interface{} {
 						if (excludePrivateRepos && edge.Node.Issue.Repository.IsPrivate) || edge.Node.Issue.Repository.IsArchived {
 							continue
 						}
+						// if the is PR was created after the end of our time window, then skip it
+						if endDateTime.Before(edge.Node.Issue.CreatedAt.Time) {
+							continue
+						}
 						orgClosedIssueCount++
 						closedIssueCount++
 					}

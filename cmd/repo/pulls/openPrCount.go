@@ -134,23 +134,30 @@ func getOpenPrCount() map[string]interface{} {
 	teamName, repositoryList := utils.GetTeamRepos()
 	// should we filter out private repositories?
 	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
-	// define the start and end time of our query window
-	refDateTime, _ := utils.GetQueryTimeWindow()
 	// retrieve the reference time for our query window
-	refDateTimeStr := refDateTime.Format("2006-01-02")
+	startDateTime, endDateTime := utils.GetQueryTimeWindow()
+	// save date strings for use in output (below)
+	startDateTimeStr := startDateTime.Format("2006-01-02")
+	endDateTimeStr := endDateTime.Format("2006-01-02")
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
 		// initialize a counter for the number of open PRs in the current organization
 		orgOpenPrCount := 0
-		// define a couple of queries to run for each organization; the first is used to query
-		// for open PRs that were created before the end of our time window and the second is
-		// used to query for closed PRs that were both created before and closed after the end
-		// of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s", orgName, refDateTimeStr))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s", orgName, refDateTimeStr, refDateTimeStr))
+		// define a few queries to run for each organization; the first is used to query
+		// for open PRs that were created before the end of our time window, the second is
+		// used to query for closed PRs that were created before and closed after the end
+		// of our query window, and the third for closed PRs that were created after the
+		// start of and closed before the end of our query window
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s",
+			orgName, endDateTimeStr))
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s",
+			orgName, endDateTimeStr, endDateTimeStr))
+		interimQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:%s..%s closed:%s..%s",
+			orgName, startDateTimeStr, endDateTimeStr, startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":   openQuery,
-			"closed": closedQuery,
+			"open":    openQuery,
+			"closed":  closedQuery,
+			"interim": interimQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
@@ -203,9 +210,13 @@ func getOpenPrCount() map[string]interface{} {
 						if idx < 0 {
 							continue
 						}
-						// if the repository associated with this issue is private and we're excluding
+						// if the repository associated with this PR is private and we're excluding
 						// private repositories or if it is archived, then skip it
 						if (excludePrivateRepos && edge.Node.PullRequest.Repository.IsPrivate) || edge.Node.PullRequest.Repository.IsArchived {
+							continue
+						}
+						// if the is PR was created after the end of our time window, then skip it
+						if endDateTime.Before(edge.Node.PullRequest.CreatedAt.Time) {
 							continue
 						}
 						orgOpenPrCount++
@@ -228,7 +239,8 @@ func getOpenPrCount() map[string]interface{} {
 	}
 	// add the total open PR count to the openPrCountMap
 	openPrCountMap["total"] = openPrCount
-	fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team on %s\n", openPrCount,
-		teamName, refDateTimeStr)
-	return map[string]interface{}{"title": "Open PR Counts", "refDate": refDateTimeStr, "counts": openPrCountMap}
+	// print a message indicating the total number of open PRs found
+	fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team between %s and %s\n", openPrCount,
+		teamName, startDateTimeStr, endDateTimeStr)
+	return map[string]interface{}{"title": "Open PR Counts", "start": startDateTimeStr, "end": endDateTimeStr, "counts": openPrCountMap}
 }

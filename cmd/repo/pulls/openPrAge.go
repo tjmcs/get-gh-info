@@ -65,28 +65,35 @@ func getAgeStats() map[string]interface{} {
 	teamName, repositoryList := utils.GetTeamRepos()
 	// should we filter out private repositories?
 	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
-	// retrieve the reference time for our query window
-	refDateTime, _ := utils.GetQueryTimeWindow()
+	// retrieve reference time for our query window
+	startDateTime, endDateTime := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
-	refDateTimeStr := refDateTime.Format("2006-01-02")
+	startDateTimeStr := startDateTime.Format("2006-01-02")
+	endDateTimeStr := endDateTime.Format("2006-01-02")
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	prAgeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define a couple of queries to run for each organization; the first is used to query
-		// for open PRs that were created before the end of our time window and the second is
-		// used to query for closed PRs that were both created before and closed after the end
-		// of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s", orgName, refDateTimeStr))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s", orgName, refDateTimeStr, refDateTimeStr))
+		// define a few queries to run for each organization; the first is used to query
+		// for open PRs that were created before the end of our time window, the second is
+		// used to query for closed PRs that were created before and closed after the end
+		// of our query window, and the third for closed PRs that were created after the
+		// start of and closed before the end of our query window
+		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s",
+			orgName, endDateTimeStr))
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s",
+			orgName, endDateTimeStr, endDateTimeStr))
+		interimQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:%s..%s closed:%s..%s",
+			orgName, startDateTimeStr, endDateTimeStr, startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":   openQuery,
-			"closed": closedQuery,
+			"open":    openQuery,
+			"closed":  closedQuery,
+			"interim": interimQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
-		for queryType, query := range queries {
+		for _, query := range queries {
 			// add the query string to use with this query to the vars map
 			vars["query"] = query
 			// initialize the flag that we use to determine if we're trying to retrieve
@@ -143,19 +150,23 @@ func getAgeStats() map[string]interface{} {
 						}
 						// save the current PR's creation time
 						prCreatedAt := edge.Node.PullRequest.CreatedAt
+						// if the is PR was created after the end of our time window, then skip it
+						if endDateTime.Before(prCreatedAt.Time) {
+							continue
+						}
 						// if this is a closed PR
-						if queryType == "closed" {
+						if edge.Node.PullRequest.Closed {
 							// and if this PR was closed before the reference time, then use that time
-							// to calculate the age of the issue and continue with the next issue
+							// to calculate the age of the PR and continue with the next PR
 							prClosedAt := edge.Node.PullRequest.ClosedAt
-							if prClosedAt.Before(refDateTime.Time) {
+							if prClosedAt.Before(endDateTime.Time) {
 								prAgeList = append(prAgeList, prClosedAt.Sub(prCreatedAt.Time))
 								continue
 							}
 						}
-						// otherwise, the issue is still open so use the end time of the query window
-						// to calculate the age of the issue
-						prAgeList = append(prAgeList, refDateTime.Time.Sub(prCreatedAt.Time))
+						// otherwise, the PR is still open so use the end time of the query window
+						// to calculate the age of the PR
+						prAgeList = append(prAgeList, endDateTime.Time.Sub(prCreatedAt.Time))
 					}
 				}
 				// if we've reached the end of the list of contributions, break out of the loop
@@ -178,10 +189,10 @@ func getAgeStats() map[string]interface{} {
 	if numOpenPrs == 0 {
 		fmt.Fprintf(os.Stderr, "\nWARN: No open PRs found for the specified organization(s)\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team on %s\n", numOpenPrs,
-			teamName, refDateTimeStr)
+		fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team between %s and %s\n", numOpenPrs,
+			teamName, startDateTimeStr, endDateTimeStr)
 	}
 	// add return the results as a map
-	return map[string]interface{}{"title": "Open PR Age", "refDate": refDateTimeStr,
+	return map[string]interface{}{"title": "Open PR Age", "start": startDateTimeStr, "end": endDateTimeStr,
 		"seriesLength": numOpenPrs, "stats": prAgeStats}
 }

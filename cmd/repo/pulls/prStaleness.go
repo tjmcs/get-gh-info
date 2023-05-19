@@ -78,29 +78,34 @@ func getStalenessStats() map[string]interface{} {
 		teamMemberIds = utils.GetTeamMemberIds(teamMemberMap)
 	}
 	// retrieve the reference time for our query window
-	refDateTime, _ := utils.GetQueryTimeWindow()
+	startDateTime, endDateTime := utils.GetQueryTimeWindow()
 	// save date strings for use in output (below)
-	refDateTimeStr := refDateTime.Format("2006-01-02")
+	startDateTimeStr := startDateTime.Format("2006-01-02")
+	endDateTimeStr := endDateTime.Format("2006-01-02")
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	stalenessTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define a couple of queries to run for each organization; the first is used to query
-		// for open PRs that were created before the end of our time window and the second is
-		// used to query for closed PRs that were both created before and closed after the end
-		// of our query window
+		// define a few queries to run for each organization; the first is used to query
+		// for open PRs that were created before the end of our time window, the second is
+		// used to query for closed PRs that were created before and closed after the end
+		// of our query window, and the third for closed PRs that were created after the
+		// start of and closed before the end of our query window
 		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s",
-			orgName, refDateTimeStr))
+			orgName, endDateTimeStr))
 		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s",
-			orgName, refDateTimeStr, refDateTimeStr))
+			orgName, endDateTimeStr, endDateTimeStr))
+		interimQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:%s..%s closed:%s..%s",
+			orgName, startDateTimeStr, endDateTimeStr, startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":   openQuery,
-			"closed": closedQuery,
+			"open":    openQuery,
+			"closed":  closedQuery,
+			"interim": interimQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
-		for _, query := range queries {
+		for queryType, query := range queries {
 			// add the query string to use with this query to the vars map
 			vars["query"] = query
 			// initialize the flag that we use to determine if we're trying to retrieve
@@ -150,17 +155,29 @@ func getStalenessStats() map[string]interface{} {
 						if idx < 0 {
 							continue
 						}
-						// if the repository associated with this issue is private and we're excluding
+						// if the repository associated with this PR is private and we're excluding
 						// private repositories or if it is archived, then skip it
 						if (excludePrivateRepos && edge.Node.PullRequest.Repository.IsPrivate) || edge.Node.PullRequest.Repository.IsArchived {
 							continue
 						}
 						// save the current PR's creation time
 						prCreatedAt := edge.Node.PullRequest.CreatedAt
-						// if we got this far, then the current repository is managed by the team we're interested
-						// in, so initialize a variable to store the default staleness time for this PR (here, the
-						// default is the time between the PR's creation and the end of our query window)
-						stalenessTime := refDateTime.Time.Sub(prCreatedAt.Time)
+						// if the is PR was created after the end of our time window, then skip it
+						if endDateTime.Before(prCreatedAt.Time) {
+							continue
+						}
+						// if we got this far, then the current repository is managed by the team we're interested in,
+						// so look for the time since we last had a response from a member of the team; first, initialize
+						// a variable to hold the difference between either the time the PR was closed (for interim
+						// queries) or the end of our query window (for other query types) and the creation time for
+						// this PR
+						var stalenessTime time.Duration
+						if queryType == "interim" {
+							stalenessTime = edge.Node.PullRequest.ClosedAt.Time.Sub(prCreatedAt.Time)
+						} else {
+							stalenessTime = endDateTime.Time.Sub(prCreatedAt.Time)
+						}
+						// if no comments were found for this issue, then use the default staleness time
 						// if no comments were found for this PR, then use the default staleness time
 						if len(edge.Node.PullRequest.Comments.Nodes) == 0 {
 							stalenessTimeList = append(stalenessTimeList, stalenessTime)
@@ -169,7 +186,7 @@ func getStalenessStats() map[string]interface{} {
 						// loop over the comments for this PR, looking for the first comment from a team member
 						for _, comment := range edge.Node.PullRequest.Comments.Nodes {
 							// if this comment was created after the reference time, then skip it
-							if comment.CreatedAt.After(refDateTime.Time) {
+							if comment.CreatedAt.After(endDateTime.Time) {
 								continue
 							}
 							// if the comment has an author (it should)
@@ -194,6 +211,14 @@ func getStalenessStats() map[string]interface{} {
 										continue
 									}
 								}
+								// if the comment was created after the end of our query window (or if it's an
+								// interim query and the comment was created after the PR was closed), then
+								// we've reached the end of the time where a user could have responded within our
+								// time window, so just use the default we defined (above)
+								if (queryType == "interim" && comment.CreatedAt.After(edge.Node.PullRequest.ClosedAt.Time)) ||
+									comment.CreatedAt.After(endDateTime.Time) {
+									break
+								}
 								// if get here, then we've found a comment from a member of the team,
 								// so use the time the comment was created to calculate a staleness
 								// value for this issue
@@ -203,7 +228,7 @@ func getStalenessStats() map[string]interface{} {
 									stalenessTime = edge.Node.PullRequest.ClosedAt.Time.Sub(comment.CreatedAt.Time)
 								} else {
 									// otherwise use the reference time
-									stalenessTime = refDateTime.Sub(comment.CreatedAt.Time)
+									stalenessTime = endDateTime.Sub(comment.CreatedAt.Time)
 								}
 								break
 							}
@@ -233,10 +258,10 @@ func getStalenessStats() map[string]interface{} {
 	if numOpenPrs == 0 {
 		fmt.Fprintf(os.Stderr, "\nWARN: No open PRs found for the specified organization(s)\n")
 	} else {
-		fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team on %s\n", numOpenPrs,
-			teamName, refDateTimeStr)
+		fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team between %s and %s\n", numOpenPrs,
+			teamName, startDateTimeStr, endDateTimeStr)
 	}
 	// add return the results as a map
-	return map[string]interface{}{"title": "Open PR Staleness Time", "refDate": refDateTimeStr,
+	return map[string]interface{}{"title": "Open PR Staleness Time", "start": startDateTimeStr, "end": endDateTimeStr,
 		"seriesLength": numOpenPrs, "stats": prStalenessTimeStats}
 }

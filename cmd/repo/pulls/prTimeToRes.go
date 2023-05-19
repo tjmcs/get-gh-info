@@ -143,6 +143,10 @@ func getTimeToResStats() map[string]interface{} {
 						prClosedAt := edge.Node.PullRequest.ClosedAt
 						// then save the current PR's creation time
 						prCreatedAt := edge.Node.PullRequest.CreatedAt
+						// if the is PR was created after the end of our time window, then skip it
+						if endDateTime.Before(prCreatedAt.Time) {
+							continue
+						}
 						// and append the difference (the resolution time) to the list of resolution times
 						resolutionTimeList = append(resolutionTimeList, prClosedAt.Time.Sub(prCreatedAt.Time))
 					}

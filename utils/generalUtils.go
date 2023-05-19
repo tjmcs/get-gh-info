@@ -187,20 +187,28 @@ type JsonDuration struct {
 
 func (j JsonDuration) format() string {
 	d := j.Duration
-	if d >= (time.Hour * 24) {
-		return fmt.Sprintf("%.2fd", d.Hours()/24)
-	} else if d >= time.Hour {
-		return fmt.Sprintf("%.2fh", d.Hours())
-	} else if d >= time.Minute {
-		return fmt.Sprintf("%.2fm", d.Minutes())
-	} else if d >= time.Second {
-		return fmt.Sprintf("%.2fs", d.Seconds())
-	} else if d >= time.Millisecond {
-		return fmt.Sprintf("%dms", d.Round(time.Millisecond))
-	} else if d >= time.Microsecond {
-		return fmt.Sprintf("%dus", d.Round(time.Microsecond))
-	} else if d == 0 {
+	// if the duration is zero, just return "0s"
+	if d == 0 {
 		return "0s"
+	}
+	// if not, get the absolute value of the duration
+	absVal := d
+	if d < 0 {
+		absVal = -d
+	}
+	// and use that to return a string with the appropriate units
+	if absVal >= (time.Hour * 24) {
+		return fmt.Sprintf("%.2fd", d.Hours()/24)
+	} else if absVal >= time.Hour {
+		return fmt.Sprintf("%.2fh", d.Hours())
+	} else if absVal >= time.Minute {
+		return fmt.Sprintf("%.2fm", d.Minutes())
+	} else if absVal >= time.Second {
+		return fmt.Sprintf("%.2fs", d.Seconds())
+	} else if absVal >= time.Millisecond {
+		return fmt.Sprintf("%dms", d.Round(time.Millisecond))
+	} else if absVal >= time.Microsecond {
+		return fmt.Sprintf("%dus", d.Round(time.Microsecond))
 	}
 	// else, if we get here, just return the number of nanoseconds
 	return fmt.Sprintf("%dns", d.Nanoseconds())

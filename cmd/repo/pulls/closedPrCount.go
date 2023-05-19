@@ -41,10 +41,8 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	getClosedPrsCmd.Flags().StringVarP(&repo.LookbackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("lookbackTime", getClosedPrsCmd.Flags().Lookup("lookback-time"))
 }
 
 /*
@@ -142,6 +140,10 @@ func getClosedPrCount() map[string]interface{} {
 						// if the repository associated with this PR is private and we're excluding
 						// private repositories or if it is archived, then skip it
 						if (excludePrivateRepos && edge.Node.PullRequest.Repository.IsPrivate) || edge.Node.PullRequest.Repository.IsArchived {
+							continue
+						}
+						// if the is PR was created after the end of our time window, then skip it
+						if endDateTime.Before(edge.Node.PullRequest.CreatedAt.Time) {
 							continue
 						}
 						orgClosedPrCount++
