@@ -53,36 +53,17 @@ type issueSearchEdges []struct {
 	Cursor githubv4.String
 	Node   struct {
 		Issue struct {
-			CreatedAt  githubv4.DateTime
-			UpdatedAt  githubv4.DateTime
-			Closed     bool
-			ClosedAt   githubv4.DateTime
-			Title      string
-			Url        string
-			Repository struct {
-				Name       string
-				Url        string
-				IsPrivate  bool
-				IsArchived bool
-			}
-			Assignees struct {
-				Edges []struct {
-					Node struct {
-						Login string
-					}
-				}
-			} `graphql:"assignees(first: 10)"`
-			Comments struct {
-				Nodes []struct {
-					CreatedAt githubv4.DateTime
-					UpdatedAt githubv4.DateTime
-					Author    struct {
-						Login string
-					}
-					AuthorAssociation string
-					Body              string
-				}
-			} `graphql:"comments(first: 100, orderBy: $orderCommentsBy)"`
+			CreatedAt         githubv4.DateTime
+			UpdatedAt         githubv4.DateTime
+			Closed            bool
+			ClosedAt          githubv4.DateTime
+			Title             string
+			Url               string
+			Author            cmd.Author
+			AuthorAssociation string
+			Repository        cmd.Repository
+			Assignees         cmd.Assignees `graphql:"assignees(first: 10)"`
+			Comments          cmd.Comments  `graphql:"comments(first: 100, orderBy: $orderCommentsBy)"`
 		} `graphql:"... on Issue"`
 	}
 }
@@ -136,28 +117,26 @@ func getOpenIssueCount() map[string]interface{} {
 	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
 	// retrieve the reference time for our query window
 	startDateTime, endDateTime := utils.GetQueryTimeWindow()
-	// save date strings for use in output (below)
-	startDateTimeStr := startDateTime.Format("2006-01-02")
-	endDateTimeStr := endDateTime.Format("2006-01-02")
+	// save date and datetime strings for use in output (below)
+	startDateStr := startDateTime.Format(cmd.YearMonthDayFormatStr)
+	endDateStr := endDateTime.Format(cmd.YearMonthDayFormatStr)
+	startDateTimeStr := startDateTime.Format(cmd.ISO8601_FormatStr)
+	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
 		// initialize a counter for the number of open issues in the current organization
 		orgOpenIssueCount := 0
-		// define a few queries to run for each organization; the first is used to query
+		// define a couple of queries to run for each organization; the first is used to query
 		// for open issues that were created before the end of our time window, the second is
-		// used to query for closed issues that were created before and closed after the end
-		// of our query window, and the third for closed issues that were created after the
-		// start of and closed before the end of our query window
+		// used to query for closed issues that were created before the end time and closed after
+		// the start time of our query window
 		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s",
 			orgName, endDateTimeStr))
 		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s",
-			orgName, endDateTimeStr, endDateTimeStr))
-		interimQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:%s..%s closed:%s..%s",
-			orgName, startDateTimeStr, endDateTimeStr, startDateTimeStr, endDateTimeStr))
+			orgName, endDateTimeStr, startDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":    openQuery,
-			"closed":  closedQuery,
-			"interim": interimQuery,
+			"open":   openQuery,
+			"closed": closedQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
@@ -201,10 +180,12 @@ func getOpenIssueCount() map[string]interface{} {
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
+					// define a variable to that references the pull request itself
+					issue := edge.Node.Issue
 					// if the current repository is managed by the team we're interested in, then increment the
 					// open issue count for the current organization
-					if len(edge.Node.Issue.Repository.Name) > 0 {
-						orgAndRepoName := orgName + "/" + edge.Node.Issue.Repository.Name
+					if len(issue.Repository.Name) > 0 {
+						orgAndRepoName := orgName + "/" + issue.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
 						// if the current repository is not managed by the team we're interested in, skip it
 						if idx < 0 {
@@ -212,11 +193,11 @@ func getOpenIssueCount() map[string]interface{} {
 						}
 						// if the repository associated with this issue is private and we're excluding
 						// private repositories or if it is archived, then skip it
-						if (excludePrivateRepos && edge.Node.Issue.Repository.IsPrivate) || edge.Node.Issue.Repository.IsArchived {
+						if (excludePrivateRepos && issue.Repository.IsPrivate) || issue.Repository.IsArchived {
 							continue
 						}
 						// if the is issue was created after the end of our time window, then skip it
-						if endDateTime.Before(edge.Node.Issue.CreatedAt.Time) {
+						if endDateTime.Before(issue.CreatedAt.Time) {
 							continue
 						}
 						orgOpenIssueCount++
@@ -241,7 +222,7 @@ func getOpenIssueCount() map[string]interface{} {
 	openIssueCountMap["total"] = openIssueCount
 	// print a message indicating the total number of open issues found
 	fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team between %s and %s\n", openIssueCount,
-		teamName, startDateTimeStr, endDateTimeStr)
+		teamName, startDateStr, endDateStr)
 	// and return the open issue counts as a map
 	return map[string]interface{}{"title": "Open Issue Counts", "start": startDateTimeStr, "end": endDateTimeStr, "counts": openIssueCountMap}
 }

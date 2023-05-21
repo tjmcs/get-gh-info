@@ -21,7 +21,7 @@ import (
 var (
 	getFirstRespTimeStatsCmd = &cobra.Command{
 		Use:   "firstResponseTime",
-		Short: "Statistics for the 'time to first response' of open isues",
+		Short: "Statistics for the 'time to first response' of open PRs",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
 and maximum 'time to first response' for all open PRs in the named GitHub
 organizations and in the defined time window (skipping any PRs that include
@@ -79,29 +79,27 @@ func getFirstRespTimeStats() map[string]interface{} {
 	}
 	// retrieve the reference time for our query window
 	startDateTime, endDateTime := utils.GetQueryTimeWindow()
-	// save date strings for use in output (below)
-	startDateTimeStr := startDateTime.Format("2006-01-02")
-	endDateTimeStr := endDateTime.Format("2006-01-02")
+	// save date and datetime strings for use in output (below)
+	startDateStr := startDateTime.Format(cmd.YearMonthDayFormatStr)
+	endDateStr := endDateTime.Format(cmd.YearMonthDayFormatStr)
+	startDateTimeStr := startDateTime.Format(cmd.ISO8601_FormatStr)
+	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	firstRespTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define a few queries to run for each organization; the first is used to query
-		// for open PRs that were created before the end of our time window, the second is
-		// used to query for closed PRs that were created before and closed after the end
-		// of our query window, and the third for closed PRs that were created after the
-		// start of and closed before the end of our query window
+		// define a couple of queries to run for each organization; the first is used to query
+		// for open PRs that were created before the end of our time window, the second is used
+		// to query for closed PRs that were created before the end time and closed after the
+		// start time of our query window
 		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s",
 			orgName, endDateTimeStr))
 		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s",
-			orgName, endDateTimeStr, endDateTimeStr))
-		interimQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:%s..%s closed:%s..%s",
-			orgName, startDateTimeStr, endDateTimeStr, startDateTimeStr, endDateTimeStr))
+			orgName, endDateTimeStr, startDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":    openQuery,
-			"closed":  closedQuery,
-			"interim": interimQuery,
+			"open":   openQuery,
+			"closed": closedQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
@@ -145,11 +143,13 @@ func getFirstRespTimeStats() map[string]interface{} {
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
+					// define a variable to that references the pull request itself
+					pullRequest := edge.Node.PullRequest
 					// if the current repository is managed by the team we're interested in, search for the first
 					// response from a member of the team and use the time of that response to calculate the time
 					// to first response value for this PR
-					if len(edge.Node.PullRequest.Repository.Name) > 0 {
-						orgAndRepoName := orgName + "/" + edge.Node.PullRequest.Repository.Name
+					if len(pullRequest.Repository.Name) > 0 {
+						orgAndRepoName := orgName + "/" + pullRequest.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
 						// if the current repository is not managed by the team we're interested in, skip it
 						if idx < 0 {
@@ -157,33 +157,33 @@ func getFirstRespTimeStats() map[string]interface{} {
 						}
 						// if the repository associated with this PR is private and we're excluding
 						// private repositories or if it is archived, then skip it
-						if (excludePrivateRepos && edge.Node.PullRequest.Repository.IsPrivate) || edge.Node.PullRequest.Repository.IsArchived {
+						if (excludePrivateRepos && pullRequest.Repository.IsPrivate) || pullRequest.Repository.IsArchived {
 							continue
 						}
 						// save the current PR's creation time
-						prCreatedAt := edge.Node.PullRequest.CreatedAt
+						prCreatedAt := pullRequest.CreatedAt
 						// if the is PR was created after the end of our time window, then skip it
 						if endDateTime.Before(prCreatedAt.Time) {
 							continue
 						}
 						// if we got this far, then the current repository is managed by the team we're interested in,
 						// so look for the first response from a member of the team; first, initialize a variable to
-						// hold the difference between either the time the PR was closed (for interim queries) or
-						// the end of our query window (for other query types) and the creation time for this PR
+						// hold the difference between either the time the PR was closed or the end of our query window
+						// (if it was not closed by the end of the time window) and the creation time for this PR
 						var firstRespTime time.Duration
-						if queryType == "interim" {
-							firstRespTime = edge.Node.PullRequest.ClosedAt.Time.Sub(prCreatedAt.Time)
+						if pullRequest.Closed {
+							firstRespTime = pullRequest.ClosedAt.Time.Sub(prCreatedAt.Time)
 						} else {
 							firstRespTime = endDateTime.Time.Sub(prCreatedAt.Time)
 						}
 						// if no comments were found for this PR, then use the end of our query window
 						// to determine the time to first response
-						if len(edge.Node.PullRequest.Comments.Nodes) == 0 {
+						if len(pullRequest.Comments.Nodes) == 0 {
 							firstRespTimeList = append(firstRespTimeList, firstRespTime)
 							continue
 						}
 						// loop over the comments for this PR, looking for the first comment from a team member
-						for _, comment := range edge.Node.PullRequest.Comments.Nodes {
+						for _, comment := range pullRequest.Comments.Nodes {
 							// if the comment has an author (it should)
 							if len(comment.Author.Login) > 0 {
 								// if the flag to only count comments from the immediate team was
@@ -206,11 +206,11 @@ func getFirstRespTimeStats() map[string]interface{} {
 										continue
 									}
 								}
-								// if the comment was created after the end of our query window (or if it's an
-								// interim query and the comment was created after the PR was closed), then
-								// we've reached the end of the time where a user could have responded within our
-								// time window, so just use the default we defined (above)
-								if (queryType == "interim" && comment.CreatedAt.After(edge.Node.PullRequest.ClosedAt.Time)) ||
+								// if the comment was created after the end of our query window (or it's a closed
+								// PR and the comment was created after the PR was closed), then we've reached th
+								// end of the time where a user could have responded within our time window, so just
+								// use the default we defined (above)
+								if (queryType == "interim" && comment.CreatedAt.After(pullRequest.ClosedAt.Time)) ||
 									comment.CreatedAt.After(endDateTime.Time) {
 									break
 								}
@@ -247,7 +247,7 @@ func getFirstRespTimeStats() map[string]interface{} {
 		fmt.Fprintf(os.Stderr, "\nWARN: No open PRs found for the specified organization(s)\n")
 	} else {
 		fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team between %s and %s\n", numOpenPrs,
-			teamName, startDateTimeStr, endDateTimeStr)
+			teamName, startDateStr, endDateStr)
 	}
 	// add return the results as a map
 	return map[string]interface{}{"title": "Open PR First Response Time", "start": startDateTimeStr, "end": endDateTimeStr,

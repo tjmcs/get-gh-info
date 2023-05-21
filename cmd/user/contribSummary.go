@@ -42,6 +42,7 @@ func init() {
 	// is called directly, e.g.:
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
+
 }
 
 /*
@@ -133,16 +134,16 @@ func summaryOfContribs() map[string]interface{} {
 	for _, gitHubId := range userIdList {
 		userMap := contribByUserSummary[gitHubId].(map[string]interface{})
 		if avgPullReqContribs != 0 {
-			userMap["teamPcntPullReqContribs"] = math.Round(((float64(userMap["pullReqContribs"].(int)))/avgPullReqContribs-1)*10000) / 100
+			userMap["teamPcntPullReqContribs"] = math.Round(((float64(userMap["pullReqContribs"].(int)))/avgPullReqContribs)*10000) / 100
 		}
 		if avgReposWithContribPullReqs != 0 {
-			userMap["teamPcntReposWithContribPullReqs"] = math.Round(((float64(userMap["reposWithContribPullReqs"].(int)))/avgReposWithContribPullReqs-1)*10000) / 100
+			userMap["teamPcntReposWithContribPullReqs"] = math.Round(((float64(userMap["reposWithContribPullReqs"].(int)))/avgReposWithContribPullReqs)*10000) / 100
 		}
 		if avgPullReqReviewContribs != 0 {
-			userMap["teamPcntPullReqReviewContribs"] = math.Round(((float64(userMap["pullReqReviewContribs"].(int)))/avgPullReqReviewContribs-1)*10000) / 100
+			userMap["teamPcntPullReqReviewContribs"] = math.Round(((float64(userMap["pullReqReviewContribs"].(int)))/avgPullReqReviewContribs)*10000) / 100
 		}
 		if avgReposWithContribPullReqReviews != 0 {
-			userMap["teamPcntReposWithContribPullReqReviews"] = math.Round(((float64(userMap["reposWithContribPullReqReviews"].(int)))/avgReposWithContribPullReqReviews-1)*10000) / 100
+			userMap["teamPcntReposWithContribPullReqReviews"] = math.Round(((float64(userMap["reposWithContribPullReqReviews"].(int)))/avgReposWithContribPullReqReviews)*10000) / 100
 		}
 	}
 

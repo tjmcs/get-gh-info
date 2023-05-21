@@ -11,7 +11,6 @@ import (
 
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/tjmcs/get-gh-info/cmd"
 	"github.com/tjmcs/get-gh-info/cmd/repo"
 	"github.com/tjmcs/get-gh-info/utils"
@@ -21,7 +20,7 @@ import (
 var (
 	getTimeToResStatsCmd = &cobra.Command{
 		Use:   "timeToResolution",
-		Short: "Statistics for the time to first response of open isues",
+		Short: "Statistics for the 'time to resolution' of closed PRs",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
 and maximum 'time to resolution' for all closed PRs in the named GitHub
 organizations and in the defined time window (skipping any PRs that include
@@ -43,10 +42,8 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	getTimeToResStatsCmd.Flags().StringVarP(&repo.LookbackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("lookbackTime", getTimeToResStatsCmd.Flags().Lookup("lookback-time"))
 }
 
 /*
@@ -68,16 +65,18 @@ func getTimeToResStats() map[string]interface{} {
 	teamName, repositoryList := utils.GetTeamRepos()
 	// define the start and end time of our query window
 	startDateTime, endDateTime := utils.GetQueryTimeWindow()
-	// save date strings for use in output (below)
-	startDateTimeStr := startDateTime.Format("2006-01-02")
-	endDateTimeStr := endDateTime.Format("2006-01-02")
+	// save date and datetime strings for use in output (below)
+	startDateStr := startDateTime.Format(cmd.YearMonthDayFormatStr)
+	endDateStr := endDateTime.Format(cmd.YearMonthDayFormatStr)
+	startDateTimeStr := startDateTime.Format(cmd.ISO8601_FormatStr)
+	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	resolutionTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define the query to run for each organization; the query searches for closed
-		// PRs that were closed after the start of our time window
+		// define the query to run for each organization; this query looks for closed PRs
+		// that were closed within the defined time window
 		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog closed:%s..%s", orgName,
 			startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
@@ -125,24 +124,26 @@ func getTimeToResStats() map[string]interface{} {
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
+					// define a variable to that references the pull request itself
+					pullRequest := edge.Node.PullRequest
 					// if the current repository is managed by the team we're interested in, search for the first
 					// response from a member of the team and use the time of that response to calculate the time
 					// to first response value for this PR
-					if len(edge.Node.PullRequest.Repository.Name) > 0 {
-						orgAndRepoName := orgName + "/" + edge.Node.PullRequest.Repository.Name
+					if len(pullRequest.Repository.Name) > 0 {
+						orgAndRepoName := orgName + "/" + pullRequest.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
 						// if the current repository is not managed by the team we're interested in, skip it
 						if idx < 0 {
 							continue
 						}
 						// if the repository associated with this PR is private or archived, then skip it
-						if edge.Node.PullRequest.Repository.IsPrivate || edge.Node.PullRequest.Repository.IsArchived {
+						if pullRequest.Repository.IsPrivate || pullRequest.Repository.IsArchived {
 							continue
 						}
 						// save the time when this issue was closed
-						prClosedAt := edge.Node.PullRequest.ClosedAt
+						prClosedAt := pullRequest.ClosedAt
 						// then save the current PR's creation time
-						prCreatedAt := edge.Node.PullRequest.CreatedAt
+						prCreatedAt := pullRequest.CreatedAt
 						// if the is PR was created after the end of our time window, then skip it
 						if endDateTime.Before(prCreatedAt.Time) {
 							continue
@@ -172,7 +173,7 @@ func getTimeToResStats() map[string]interface{} {
 		fmt.Fprintf(os.Stderr, "\nWARN: No closed PRs found for the specified organization(s)\n")
 	} else {
 		fmt.Fprintf(os.Stderr, "\nFound %d closed PRs in repositories managed by the '%s' team between %s and %s\n", numClosedPrs,
-			teamName, startDateTimeStr, endDateTimeStr)
+			teamName, startDateStr, endDateStr)
 	}
 	// add return the results as a map
 	return map[string]interface{}{"title": "PR Time to Resolution", "start": startDateTimeStr,

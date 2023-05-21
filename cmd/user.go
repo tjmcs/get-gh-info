@@ -10,10 +10,8 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var (
-	userList      string
-	gitHubIdList  string
-	referenceDate string
-	completeWeeks bool
+	userList     string
+	gitHubIdList string
 
 	UserCmd = &cobra.Command{
 		Use:   "user",
@@ -30,8 +28,10 @@ func init() {
 	// and all subcommands, e.g.:
 	UserCmd.PersistentFlags().StringVarP(&userList, "user-list", "u", "", "list of users to gather contributions for")
 	UserCmd.PersistentFlags().StringVarP(&gitHubIdList, "github-id-list", "i", "", "list of GitHub IDs to gather contributions for")
-	UserCmd.PersistentFlags().StringVarP(&referenceDate, "ref-date", "d", "", "reference date for time window (YYYY-MM-DD)")
-	UserCmd.PersistentFlags().BoolVarP(&completeWeeks, "complete-weeks", "w", false, "only output complete weeks (starting Monday)")
+	UserCmd.PersistentFlags().StringVarP(&ReferenceDate, "ref-date", "d", "", "reference date for time window (YYYY-MM-DD)")
+	UserCmd.PersistentFlags().StringVarP(&LookbackTime, "lookback-time", "l", "", "'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)")
+	UserCmd.PersistentFlags().BoolVarP(&CompleteWeeks, "complete-weeks", "w", false, "only output complete weeks (starting Monday)")
+	UserCmd.PersistentFlags().StringVarP(&CompTeam, "team", "t", "", "name of team to gather data for or compare against")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
@@ -40,5 +40,8 @@ func init() {
 	viper.BindPFlag("userList", UserCmd.PersistentFlags().Lookup("user-list"))
 	viper.BindPFlag("gitHubIdList", UserCmd.PersistentFlags().Lookup("github-id-list"))
 	viper.BindPFlag("referenceDate", UserCmd.PersistentFlags().Lookup("ref-date"))
+	viper.BindPFlag("lookbackTime", UserCmd.PersistentFlags().Lookup("lookback-time"))
 	viper.BindPFlag("completeWeeks", UserCmd.PersistentFlags().Lookup("complete-weeks"))
+	viper.BindPFlag("teamName", UserCmd.PersistentFlags().Lookup("team"))
+
 }

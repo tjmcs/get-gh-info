@@ -13,6 +13,15 @@ import (
 
 // rootCmd represents the base command when called without any subcommands
 var (
+	// define variables used in subcommands to setup flags asociated with the time window
+	// for our queries
+	LookbackTime  string
+	ReferenceDate string
+	CompleteWeeks bool
+	// and a couple of others that are used in various subcommands
+	CompTeam       string
+	ExcludePrivate bool
+	// and some other global variables that are used locally to setup persistent flags
 	cfgFile    string
 	outputFile string
 	orgList    string

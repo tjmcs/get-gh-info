@@ -6,7 +6,13 @@ package cmd
 import (
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+)
+
+const (
+	// define a couple of constant variables containing formating strings
+	// (used to format dates for output and GraphQL queries)
+	ISO8601_FormatStr     = "2006-01-02T15:04:05.999Z"
+	YearMonthDayFormatStr = "2006-01-02"
 )
 
 // rootCmd represents the base command when called without any subcommands
@@ -22,9 +28,44 @@ var (
 )
 
 /*
- * PageInfo is a struct that contains the information needed to paginate through
- * a list of items returned from a GraphQL query.
+ * Define a few types that we can use to define (and extract data from) the body of the GraphQL
+ * queries that will be used to retrieve the list of issues/PRs in the named GitHub organization(s)
  */
+type Author struct {
+	Login string
+	User  struct {
+		Email   string
+		Company string
+	} `graphql:"... on User"`
+}
+
+type Repository struct {
+	Name       string
+	Url        string
+	IsPrivate  bool
+	IsArchived bool
+}
+
+type Assignees struct {
+	Edges []struct {
+		Node struct {
+			Login string
+		}
+	}
+}
+
+type Comments struct {
+	Nodes []struct {
+		CreatedAt githubv4.DateTime
+		UpdatedAt githubv4.DateTime
+		Author    struct {
+			Login string
+		}
+		AuthorAssociation string
+		Body              string
+	}
+}
+
 type PageInfo struct {
 	EndCursor   githubv4.String
 	HasNextPage bool
@@ -36,17 +77,9 @@ func init() {
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
-	RepoCmd.PersistentFlags().StringVarP(&compTeam, "team", "t", "", "name of team to gather data for")
-	RepoCmd.PersistentFlags().StringVarP(&referenceDate, "ref-date", "d", "", "reference date for time window (YYYY-MM-DD)")
-	RepoCmd.PersistentFlags().BoolVarP(&completeWeeks, "complete-weeks", "w", false, "only output complete weeks (starting Monday)")
-	RepoCmd.PersistentFlags().BoolVarP(&excludePrivate, "exclude-private-repos", "e", false, "exclude private repositories from output")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("teamName", RepoCmd.PersistentFlags().Lookup("team"))
-	viper.BindPFlag("referenceDate", RepoCmd.PersistentFlags().Lookup("ref-date"))
-	viper.BindPFlag("completeWeeks", RepoCmd.PersistentFlags().Lookup("complete-weeks"))
-	viper.BindPFlag("excludePrivateRepos", RepoCmd.PersistentFlags().Lookup("exclude-private-repos"))
 }

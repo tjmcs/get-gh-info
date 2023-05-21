@@ -79,29 +79,27 @@ func getFirstRespTimeStats() map[string]interface{} {
 	}
 	// retrieve the reference time for our query window
 	startDateTime, endDateTime := utils.GetQueryTimeWindow()
-	// save date strings for use in output (below)
-	startDateTimeStr := startDateTime.Format("2006-01-02")
-	endDateTimeStr := endDateTime.Format("2006-01-02")
+	// save date and datetime strings for use in output (below)
+	startDateStr := startDateTime.Format(cmd.YearMonthDayFormatStr)
+	endDateStr := endDateTime.Format(cmd.YearMonthDayFormatStr)
+	startDateTimeStr := startDateTime.Format(cmd.ISO8601_FormatStr)
+	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	firstRespTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define a few queries to run for each organization; the first is used to query
+		// define a couple of queries to run for each organization; the first is used to query
 		// for open issues that were created before the end of our time window, the second is
-		// used to query for closed issues that were created before and closed after the end
-		// of our query window, and the third for closed issues that were created after the
-		// start of and closed before the end of our query window
+		// used to query for closed issues that were created before the end time and closed after
+		// the start time of our query window
 		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s",
 			orgName, endDateTimeStr))
 		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s",
-			orgName, endDateTimeStr, endDateTimeStr))
-		interimQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:%s..%s closed:%s..%s",
-			orgName, startDateTimeStr, endDateTimeStr, startDateTimeStr, endDateTimeStr))
+			orgName, endDateTimeStr, startDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":    openQuery,
-			"closed":  closedQuery,
-			"interim": interimQuery,
+			"open":   openQuery,
+			"closed": closedQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
@@ -145,11 +143,13 @@ func getFirstRespTimeStats() map[string]interface{} {
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
+					// define a variable to that references the pull request itself
+					issue := edge.Node.Issue
 					// if the current repository is managed by the team we're interested in, search for the first
 					// response from a member of the team and use the time of that response to calculate the time
 					// to first response value for this issue
-					if len(edge.Node.Issue.Repository.Name) > 0 {
-						orgAndRepoName := orgName + "/" + edge.Node.Issue.Repository.Name
+					if len(issue.Repository.Name) > 0 {
+						orgAndRepoName := orgName + "/" + issue.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
 						// if the current repository is not managed by the team we're interested in, skip it
 						if idx < 0 {
@@ -157,32 +157,32 @@ func getFirstRespTimeStats() map[string]interface{} {
 						}
 						// if the repository associated with this issue is private and we're excluding
 						// private repositories or if it is archived, then skip it
-						if (excludePrivateRepos && edge.Node.Issue.Repository.IsPrivate) || edge.Node.Issue.Repository.IsArchived {
+						if (excludePrivateRepos && issue.Repository.IsPrivate) || issue.Repository.IsArchived {
 							continue
 						}
 						// save the current issue's creation time
-						issueCreatedAt := edge.Node.Issue.CreatedAt
+						issueCreatedAt := issue.CreatedAt
 						// if the is issue was created after the end of our time window, then skip it
 						if endDateTime.Before(issueCreatedAt.Time) {
 							continue
 						}
 						// if we got this far, then the current repository is managed by the team we're interested in,
 						// so look for the first response from a member of the team; first, initialize a variable to
-						// hold the difference between either the time the issue was closed (for interim queries) or
-						// the end of our query window (for other query types) and the creation time for this issue
+						// hold the difference between either the time the issue was closed or the end of our query window
+						// (if it was not closed by the end of the time window) and the creation time for this issue
 						var firstRespTime time.Duration
-						if queryType == "interim" {
-							firstRespTime = edge.Node.Issue.ClosedAt.Time.Sub(issueCreatedAt.Time)
+						if issue.Closed {
+							firstRespTime = issue.ClosedAt.Time.Sub(issue.CreatedAt.Time)
 						} else {
-							firstRespTime = endDateTime.Time.Sub(issueCreatedAt.Time)
+							firstRespTime = endDateTime.Time.Sub(issue.CreatedAt.Time)
 						}
 						// if no comments were found for this issue, then use the default time we just defined
-						if len(edge.Node.Issue.Comments.Nodes) == 0 {
+						if len(issue.Comments.Nodes) == 0 {
 							firstRespTimeList = append(firstRespTimeList, firstRespTime)
 							continue
 						}
 						// loop over the comments for this issue, looking for the first comment from a team member
-						for _, comment := range edge.Node.Issue.Comments.Nodes {
+						for _, comment := range issue.Comments.Nodes {
 							// if the comment has an author (it should)
 							if len(comment.Author.Login) > 0 {
 								// if the flag to only count comments from the immediate team was
@@ -209,7 +209,7 @@ func getFirstRespTimeStats() map[string]interface{} {
 								// interim query and the comment was created after the issue was closed), then
 								// we've reached the end of the time where a user could have responded within our
 								// time window, so just use the default we defined (above)
-								if (queryType == "interim" && comment.CreatedAt.After(edge.Node.Issue.ClosedAt.Time)) ||
+								if (queryType == "interim" && comment.CreatedAt.After(issue.ClosedAt.Time)) ||
 									comment.CreatedAt.After(endDateTime.Time) {
 									break
 								}
@@ -246,7 +246,7 @@ func getFirstRespTimeStats() map[string]interface{} {
 		fmt.Fprintf(os.Stderr, "\nWARN: No open issues found for the specified organization(s)\n")
 	} else {
 		fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team between %s and %s\n", numOpenIssues,
-			teamName, startDateTimeStr, endDateTimeStr)
+			teamName, startDateStr, endDateStr)
 	}
 	// add return the results as a map
 	return map[string]interface{}{"title": "Open Issue First Response Time", "start": startDateTimeStr, "end": endDateTimeStr,

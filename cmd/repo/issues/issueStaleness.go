@@ -80,29 +80,27 @@ func getStalenessStats() map[string]interface{} {
 	}
 	// retrieve the reference time for our query window
 	startDateTime, endDateTime := utils.GetQueryTimeWindow()
-	// save date strings for use in output (below)
-	startDateTimeStr := startDateTime.Format("2006-01-02")
-	endDateTimeStr := endDateTime.Format("2006-01-02")
+	// save date and datetime strings for use in output (below)
+	startDateStr := startDateTime.Format(cmd.YearMonthDayFormatStr)
+	endDateStr := endDateTime.Format(cmd.YearMonthDayFormatStr)
+	startDateTimeStr := startDateTime.Format(cmd.ISO8601_FormatStr)
+	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	stalenessTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define a few queries to run for each organization; the first is used to query
+		// define a couple of queries to run for each organization; the first is used to query
 		// for open issues that were created before the end of our time window, the second is
-		// used to query for closed issues that were created before and closed after the end
-		// of our query window, and the third for closed issues that were created after the
-		// start of and closed before the end of our query window
+		// used to query for closed issues that were created before the end time and closed after
+		// the start time of our query window
 		openQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:open -label:backlog created:<%s",
 			orgName, endDateTimeStr))
 		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:<%s closed:>%s",
-			orgName, endDateTimeStr, endDateTimeStr))
-		interimQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog created:%s..%s closed:%s..%s",
-			orgName, startDateTimeStr, endDateTimeStr, startDateTimeStr, endDateTimeStr))
+			orgName, endDateTimeStr, startDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":    openQuery,
-			"closed":  closedQuery,
-			"interim": interimQuery,
+			"open":   openQuery,
+			"closed": closedQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
@@ -146,11 +144,13 @@ func getStalenessStats() map[string]interface{} {
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
+					// define a variable to that references the pull request itself
+					issue := edge.Node.Issue
 					// if the current repository is managed by the team we're interested in, search for the first
 					// response from a member of the team and use the time of that response to calculate the time
 					// to first response value for this issue
-					if len(edge.Node.Issue.Repository.Name) > 0 {
-						orgAndRepoName := orgName + "/" + edge.Node.Issue.Repository.Name
+					if len(issue.Repository.Name) > 0 {
+						orgAndRepoName := orgName + "/" + issue.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
 						// if the current repository is not managed by the team we're interested in, skip it
 						if idx < 0 {
@@ -158,11 +158,11 @@ func getStalenessStats() map[string]interface{} {
 						}
 						// if the repository associated with this issue is private and we're excluding
 						// private repositories or if it is archived, then skip it
-						if (excludePrivateRepos && edge.Node.Issue.Repository.IsPrivate) || edge.Node.Issue.Repository.IsArchived {
+						if (excludePrivateRepos && issue.Repository.IsPrivate) || issue.Repository.IsArchived {
 							continue
 						}
 						// save the current issue's creation time
-						issueCreatedAt := edge.Node.Issue.CreatedAt
+						issueCreatedAt := issue.CreatedAt
 						// if the is issue was created after the end of our time window, then skip it
 						if endDateTime.Before(issueCreatedAt.Time) {
 							continue
@@ -174,17 +174,17 @@ func getStalenessStats() map[string]interface{} {
 						// this issue
 						var stalenessTime time.Duration
 						if queryType == "interim" {
-							stalenessTime = edge.Node.Issue.ClosedAt.Time.Sub(issueCreatedAt.Time)
+							stalenessTime = issue.ClosedAt.Time.Sub(issueCreatedAt.Time)
 						} else {
 							stalenessTime = endDateTime.Time.Sub(issueCreatedAt.Time)
 						}
 						// if no comments were found for this issue, then use the default staleness time
-						if len(edge.Node.Issue.Comments.Nodes) == 0 {
+						if len(issue.Comments.Nodes) == 0 {
 							stalenessTimeList = append(stalenessTimeList, stalenessTime)
 							continue
 						}
 						// loop over the comments for this issue, looking for the first comment from a team member
-						for _, comment := range edge.Node.Issue.Comments.Nodes {
+						for _, comment := range issue.Comments.Nodes {
 							// if this comment was created after the reference time, then skip it
 							if comment.CreatedAt.After(endDateTime.Time) {
 								continue
@@ -211,21 +211,13 @@ func getStalenessStats() map[string]interface{} {
 										continue
 									}
 								}
-								// if the comment was created after the end of our query window (or if it's an
-								// interim query and the comment was created after the issue was closed), then
-								// we've reached the end of the time where a user could have responded within our
-								// time window, so just use the default we defined (above)
-								if (queryType == "interim" && comment.CreatedAt.After(edge.Node.Issue.ClosedAt.Time)) ||
-									comment.CreatedAt.After(endDateTime.Time) {
-									break
-								}
 								// if get here, then we've found a comment from a member of the team,
 								// so use the time the comment was created to calculate a staleness
 								// value for this issue
-								if edge.Node.Issue.Closed {
+								if issue.Closed {
 									// if the issue is closed, then use the time the issue was closed
 									// to determine the staleness time
-									stalenessTime = edge.Node.Issue.ClosedAt.Time.Sub(comment.CreatedAt.Time)
+									stalenessTime = issue.ClosedAt.Time.Sub(comment.CreatedAt.Time)
 								} else {
 									// otherwise use the reference time
 									stalenessTime = endDateTime.Sub(comment.CreatedAt.Time)
@@ -259,7 +251,7 @@ func getStalenessStats() map[string]interface{} {
 		fmt.Fprintf(os.Stderr, "\nWARN: No open issues found for the specified organization(s)\n")
 	} else {
 		fmt.Fprintf(os.Stderr, "\nFound %d open issues in repositories managed by the '%s' team between %s and %s\n", numOpenIssues,
-			teamName, startDateTimeStr, endDateTimeStr)
+			teamName, startDateStr, endDateStr)
 	}
 	// add return the results as a map
 	return map[string]interface{}{"title": "Open Issue Staleness Time", "start": startDateTimeStr, "end": endDateTimeStr,

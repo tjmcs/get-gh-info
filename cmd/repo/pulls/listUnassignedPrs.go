@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sort"
 	"time"
 
 	"github.com/shurcooL/githubv4"
@@ -19,21 +20,21 @@ import (
 
 // contribSummaryCmd represents the 'contribSummary' command
 var (
-	getAgeStatsCmd = &cobra.Command{
-		Use:   "age",
-		Short: "Statistics for the 'age' of open pull requests",
-		Long: `Calculates the minimum, first quartile, median, average, third quartile,
-and maximum 'age' for all open PRs in the named GitHub organizations in
-the defined time window (skipping PRs that include the 'backlog' label
-and only counting PRs in repositories that are managed by the named team)`,
+	listUnassignedPrsCmd = &cobra.Command{
+		Use:   "listUnassigned",
+		Short: "List the unassigned and open PRs in the named GitHub organization(s)",
+		Long: `Constructs a list (sorted by age) of the of PRs that are both open and
+unassigned in the named GitHub organization and defined time window (skipping
+any PRs that include the 'backlog' label and only including PRs from the
+repositories that are managed by the named team)`,
 		Run: func(cmd *cobra.Command, args []string) {
-			utils.DumpMapAsJSON(getAgeStats())
+			utils.DumpMapAsJSON(listUnassignedPrCount())
 		},
 	}
 )
 
 func init() {
-	repo.PullsCmd.AddCommand(getAgeStatsCmd)
+	repo.PullsCmd.AddCommand(listUnassignedPrsCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -47,13 +48,12 @@ func init() {
 }
 
 /*
- * define the function that is used to calculate the statistics associated with
- * the "time to first response" for any open PRs in the named GitHub organization(s);
- * note that this function skips open PRs that include the 'backlog' label and only
- * includes first response times for PRs in repositories that are managed by the
- * named team(s)
+ * define the function that is used to count the number of unassigned PRs in the
+ * named GitHub organization(s); note that this function skips unassigned PRs that
+ * include the 'backlog' label and only counts PRs in repositories that are
+ * managed by the named team(s)
  */
-func getAgeStats() map[string]interface{} {
+func listUnassignedPrCount() []map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
 	// initialize the vars map that we'll use when making our query for PR review contributions
@@ -61,20 +61,20 @@ func getAgeStats() map[string]interface{} {
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
 	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
+	// and initialize a map that will be used to store counts for each of the named organizations
+	// and a total count
+	unassignedPrList := []map[string]interface{}{}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
 	// should we filter out private repositories?
 	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
-	// retrieve reference time for our query window
+	// retrieve the reference time for our query window
 	startDateTime, endDateTime := utils.GetQueryTimeWindow()
 	// save date and datetime strings for use in output (below)
 	startDateStr := startDateTime.Format(cmd.YearMonthDayFormatStr)
 	endDateStr := endDateTime.Format(cmd.YearMonthDayFormatStr)
 	startDateTimeStr := startDateTime.Format(cmd.ISO8601_FormatStr)
 	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
-	// and initialize a list of durations that will be used to store the time to first
-	// response values
-	prAgeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
 		// define a couple of queries to run for each organization; the first is used to query
@@ -94,16 +94,16 @@ func getAgeStats() map[string]interface{} {
 		for _, query := range queries {
 			// add the query string to use with this query to the vars map
 			vars["query"] = query
-			// initialize the flag that we use to determine if we're trying to retrieve
-			// the first page of results for this query (or not)
+			// of results for each organization (or not)
 			firstPage := true
 			// and a few other variables that we'll use to query the system for results
 			var err error
 			var edges prSearchEdges
 			var pageInfo cmd.PageInfo
-			// loop over the pages of results from this query until we've reached the end
-			// of the list of PRs that matched
+			// loop over the pages of results until we've reached the end of the list of unassigned
+			// PRs for this organization
 			for {
+				// set the "after" field to our current "lastCursor" value
 				// run our query and add the data we want from the query results to the
 				// repositoryList map
 				if firstPage {
@@ -133,9 +133,8 @@ func getAgeStats() map[string]interface{} {
 				for _, edge := range edges {
 					// define a variable to that references the pull request itself
 					pullRequest := edge.Node.PullRequest
-					// if the current repository is managed by the team we're interested in, search for the first
-					// response from a member of the team and use the time of that response to calculate the time
-					// to first response value for this PR
+					// if the current repository is managed by the team we're interested in, then increment the
+					// unassigned PR count for the current organization
 					if len(pullRequest.Repository.Name) > 0 {
 						orgAndRepoName := orgName + "/" + pullRequest.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
@@ -143,56 +142,72 @@ func getAgeStats() map[string]interface{} {
 						if idx < 0 {
 							continue
 						}
-						// if the repository associated with this issue is private and we're excluding
+						// if the repository associated with this PR is private and we're excluding
 						// private repositories or if it is archived, then skip it
 						if (excludePrivateRepos && pullRequest.Repository.IsPrivate) || pullRequest.Repository.IsArchived {
 							continue
 						}
-						// save the current PR's creation time
-						prCreatedAt := pullRequest.CreatedAt
 						// if the is PR was created after the end of our time window, then skip it
-						if endDateTime.Before(prCreatedAt.Time) {
+						if endDateTime.Before(pullRequest.CreatedAt.Time) {
 							continue
 						}
-						// if this is a closed PR
-						if pullRequest.Closed {
-							// and if this PR was closed before the reference time, then use that time
-							// to calculate the age of the PR and continue with the next PR
-							prClosedAt := pullRequest.ClosedAt
-							if prClosedAt.Before(endDateTime.Time) {
-								prAgeList = append(prAgeList, prClosedAt.Sub(prCreatedAt.Time))
-								continue
-							}
+						// if someone has been assigned to this issue, then skip it
+						if len(pullRequest.Assignees.Edges) > 0 {
+							continue
 						}
-						// otherwise, the PR is still open so use the end time of the query window
-						// to calculate the age of the PR
-						prAgeList = append(prAgeList, endDateTime.Time.Sub(prCreatedAt.Time))
+						// determine if this issue was created by an internal or external user
+						// (i.e., a member of the organization or not)
+						creatorIsMember := false
+						if pullRequest.AuthorAssociation == "OWNER" ||
+							pullRequest.AuthorAssociation == "MEMBER" ||
+							pullRequest.AuthorAssociation == "COLLABORATOR" {
+							creatorIsMember = true
+						}
+						// determine the age of this PR (which will be the time from when the PR was
+						// created to either the time it was closed if it's closed or to the the end
+						// of our time window if it's still open)
+						var prAge time.Duration
+						if pullRequest.Closed {
+							prAge = pullRequest.ClosedAt.Time.Sub(pullRequest.CreatedAt.Time)
+						} else {
+							prAge = endDateTime.Sub(pullRequest.CreatedAt.Time)
+						}
+						unassignedPrList = append(unassignedPrList, map[string]interface{}{
+							"createdAt":       pullRequest.CreatedAt.Time,
+							"closed":          pullRequest.Closed,
+							"closedAt":        pullRequest.ClosedAt.Time,
+							"url":             pullRequest.Url,
+							"title":           pullRequest.Title,
+							"creator":         pullRequest.Author.Login,
+							"creatorIsMember": creatorIsMember,
+							"company":         pullRequest.Author.User.Company,
+							"email":           pullRequest.Author.User.Email,
+							"assignees":       "",
+							"age":             utils.JsonDuration{Duration: prAge},
+						})
 					}
 				}
 				// if we've reached the end of the list of contributions, break out of the loop
 				if !pageInfo.HasNextPage {
 					break
 				}
-				// set the "after" field to the "EndCursor" from the pageInfo structure so
-				// we will get the next page of results when we run the query again
 				vars["after"] = pageInfo.EndCursor
 			}
 			// and unset the "after" key in the vars map so that we're ready
 			// for the next query
 			delete(vars, "after")
 		} // end of loop over queries
-	} // end of loop over organizations
-
-	// calculate the stats for the list of open PR ages
-	prAgeStats, numOpenPrs := utils.GetJsonDurationStats(prAgeList)
-	// print a message indicating how many open PRs were found
-	if numOpenPrs == 0 {
-		fmt.Fprintf(os.Stderr, "\nWARN: No open PRs found for the specified organization(s)\n")
-	} else {
-		fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team between %s and %s\n", numOpenPrs,
-			teamName, startDateStr, endDateStr)
 	}
-	// add return the results as a map
-	return map[string]interface{}{"title": "Open PR Age", "start": startDateTimeStr, "end": endDateTimeStr,
-		"seriesLength": numOpenPrs, "stats": prAgeStats}
+	// print a message indicating the total number of unassigned PRs found
+	numUnassignedPrs := len(unassignedPrList)
+	fmt.Fprintf(os.Stderr, "\nFound %d unassigned PRs in repositories managed by the '%s' team between %s and %s\n", numUnassignedPrs,
+		teamName, startDateStr, endDateStr)
+	// If we have more than one unassigned PR, then sort the list of unassigned PRs by the age of each PR
+	if numUnassignedPrs > 1 {
+		sort.Slice(unassignedPrList, func(i, j int) bool {
+			return unassignedPrList[i]["age"].(utils.JsonDuration).Duration > unassignedPrList[j]["age"].(utils.JsonDuration).Duration
+		})
+	}
+	// and return it
+	return unassignedPrList
 }

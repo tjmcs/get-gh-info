@@ -21,7 +21,7 @@ import (
 var (
 	getTimeToResStatsCmd = &cobra.Command{
 		Use:   "timeToResolution",
-		Short: "Statistics for the 'time to resolution' of open isues",
+		Short: "Statistics for the 'time to resolution' of closed isues",
 		Long: `Calculates the minimum, first quartile, median, average, third quartile,
 and maximum 'time to resolution' for all closed issues in the named GitHub
 organizations and in the defined time window (skipping any issues that include
@@ -43,10 +43,8 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	getTimeToResStatsCmd.Flags().BoolVarP(&repo.RestrictToTeam, "restrict-to-team", "r", false, "only count comments from immediate team members")
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
-	viper.BindPFlag("restrictToTeam", getTimeToResStatsCmd.Flags().Lookup("restrict-to-team"))
 }
 
 /*
@@ -70,19 +68,18 @@ func getTimeToResStats() map[string]interface{} {
 	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
 	// retrieve the start and end time for our query window
 	startDateTime, endDateTime := utils.GetQueryTimeWindow()
-	// save date strings for use in output (below)
-	startDateTimeStr := startDateTime.Format("2006-01-02")
-	endDateTimeStr := endDateTime.Format("2006-01-02")
+	// save date and datetime strings for use in output (below)
+	startDateStr := startDateTime.Format(cmd.YearMonthDayFormatStr)
+	endDateStr := endDateTime.Format(cmd.YearMonthDayFormatStr)
+	startDateTimeStr := startDateTime.Format(cmd.ISO8601_FormatStr)
+	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
 	// and initialize a list of durations that will be used to store the time to first
 	// response values
 	resolutionTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define a few queries to run for each organization; the first is used to query
-		// for open issues that were created before the end of our time window, the second is
-		// used to query for closed issues that were created before and closed after the end
-		// of our query window, and the third for closed issues that were created after the
-		// start of and closed before the end of our query window
+		// define the query to run for each organization; this query looks for closed issues
+		// that were closed within the defined time window
 		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:issue state:closed -label:backlog closed:%s..%s", orgName,
 			startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
@@ -130,11 +127,13 @@ func getTimeToResStats() map[string]interface{} {
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
+					// define a variable to that references the pull request itself
+					issue := edge.Node.Issue
 					// if the current repository is managed by the team we're interested in, search for the first
 					// response from a member of the team and use the time of that response to calculate the time
 					// to first response value for this issue
-					if len(edge.Node.Issue.Repository.Name) > 0 {
-						orgAndRepoName := orgName + "/" + edge.Node.Issue.Repository.Name
+					if len(issue.Repository.Name) > 0 {
+						orgAndRepoName := orgName + "/" + issue.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
 						// if the current repository is not managed by the team we're interested in, skip it
 						if idx < 0 {
@@ -142,13 +141,13 @@ func getTimeToResStats() map[string]interface{} {
 						}
 						// if the repository associated with this issue is private and we're excluding
 						// private repositories or if it is archived, then skip it
-						if (excludePrivateRepos && edge.Node.Issue.Repository.IsPrivate) || edge.Node.Issue.Repository.IsArchived {
+						if (excludePrivateRepos && issue.Repository.IsPrivate) || issue.Repository.IsArchived {
 							continue
 						}
 						// save the time when this issue was closed
-						issueClosedAt := edge.Node.Issue.ClosedAt
+						issueClosedAt := issue.ClosedAt
 						// then save the current issue's creation time
-						issueCreatedAt := edge.Node.Issue.CreatedAt
+						issueCreatedAt := issue.CreatedAt
 						// if the is issue was created after the end of our time window, then skip it
 						if endDateTime.Before(issueCreatedAt.Time) {
 							continue
@@ -178,7 +177,7 @@ func getTimeToResStats() map[string]interface{} {
 		fmt.Fprintf(os.Stderr, "\nWARN: No closed issues found for the specified organization(s)\n")
 	} else {
 		fmt.Fprintf(os.Stderr, "\nFound %d closed issues in repositories managed by the '%s' team between %s and %s\n", numClosedIssues,
-			teamName, startDateTimeStr, endDateTimeStr)
+			teamName, startDateStr, endDateStr)
 	}
 	// add return the results as a map
 	return map[string]interface{}{"title": "Issue Time to Resolution", "start": startDateTimeStr,

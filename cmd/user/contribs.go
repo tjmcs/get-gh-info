@@ -133,7 +133,7 @@ func contribs() map[string]interface{} {
 			// list of contributions made by this user to this organization in the
 			// specified time period)
 			for {
-				// set the "after" field to our current "lastCursof" value
+				// set the "after" field to our current "lastCursor" value
 				vars["after"] = lastCursor
 				// run our query, returning the results in the CommitContributionsMadeQuery struct
 				err := client.Query(context.Background(), &contributionsMadeQuery, vars)

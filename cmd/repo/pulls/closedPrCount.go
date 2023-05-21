@@ -71,9 +71,11 @@ func getClosedPrCount() map[string]interface{} {
 	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
 	// retrieve the start and end time for our query window
 	startDateTime, endDateTime := utils.GetQueryTimeWindow()
-	// save date strings for use in output (below)
-	startDateTimeStr := startDateTime.Format("2006-01-02")
-	endDateTimeStr := endDateTime.Format("2006-01-02")
+	// save date and datetime strings for use in output (below)
+	startDateStr := startDateTime.Format(cmd.YearMonthDayFormatStr)
+	endDateStr := endDateTime.Format(cmd.YearMonthDayFormatStr)
+	startDateTimeStr := startDateTime.Format(cmd.ISO8601_FormatStr)
+	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
 		// initialize a counter for the number of closed PRs in the current organization
@@ -128,10 +130,12 @@ func getClosedPrCount() map[string]interface{} {
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
+					// define a variable to that references the pull request itself
+					pullRequest := edge.Node.PullRequest
 					// if the current repository is managed by the team we're interested in, then increment the
 					// closed PR count for the current organization
-					if len(edge.Node.PullRequest.Repository.Name) > 0 {
-						orgAndRepoName := orgName + "/" + edge.Node.PullRequest.Repository.Name
+					if len(pullRequest.Repository.Name) > 0 {
+						orgAndRepoName := orgName + "/" + pullRequest.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
 						// if the current repository is not managed by the team we're interested in, skip it
 						if idx < 0 {
@@ -139,11 +143,11 @@ func getClosedPrCount() map[string]interface{} {
 						}
 						// if the repository associated with this PR is private and we're excluding
 						// private repositories or if it is archived, then skip it
-						if (excludePrivateRepos && edge.Node.PullRequest.Repository.IsPrivate) || edge.Node.PullRequest.Repository.IsArchived {
+						if (excludePrivateRepos && pullRequest.Repository.IsPrivate) || pullRequest.Repository.IsArchived {
 							continue
 						}
 						// if the is PR was created after the end of our time window, then skip it
-						if endDateTime.Before(edge.Node.PullRequest.CreatedAt.Time) {
+						if endDateTime.Before(pullRequest.CreatedAt.Time) {
 							continue
 						}
 						orgClosedPrCount++
@@ -168,7 +172,7 @@ func getClosedPrCount() map[string]interface{} {
 	closedPrCountMap["total"] = closedPrCount
 	// print a message indicating the total number of closed PRs found
 	fmt.Fprintf(os.Stderr, "\nFound %d closed PRs in repositories managed by the '%s' team between %s and %s\n", closedPrCount,
-		teamName, startDateTimeStr, endDateTimeStr)
+		teamName, startDateStr, endDateStr)
 	// and return the closed PR counts as a map
 	return map[string]interface{}{"title": "Closed PR Counts", "start": startDateTimeStr,
 		"end": endDateTimeStr, "counts": closedPrCountMap}
