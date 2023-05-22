@@ -41,7 +41,7 @@ func FindIndexOf(val string, strSlice []string) int {
 }
 
 /*
- * a utility function used to get the average duration of a list of durations
+ * a utility function used to get the average duration of a slice of durations
  */
 func GetAverageDuration(durations []time.Duration) time.Duration {
 	var total time.Duration
@@ -68,7 +68,8 @@ func ReadYamlFile(fileName string) []map[string]interface{} {
 		fmt.Fprintf(os.Stderr, "ERROR: while unmarshaling data from input YAML file '%s'; %s\n", fileName, err)
 		os.Exit(-6)
 	}
-	// convert the list of maps of interfaces to interfaces into a list of maps of strings
+	// convert the slice of maps of interfaces to interfaces into a slice of maps of strings
+	// to interfaces
 	listOfStringMaps := []map[string]interface{}{}
 	for _, item := range data {
 		listOfStringMaps = append(listOfStringMaps, convInterToInterMapToStringToInterMap(item))

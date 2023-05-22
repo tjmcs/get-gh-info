@@ -16,7 +16,7 @@ import (
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
-// contribSummaryCmd represents the 'contribSummary' command
+// getTimeToResStatsCmd represents the 'repo pulls timeToResolution' command
 var (
 	getTimeToResStatsCmd = &cobra.Command{
 		Use:   "timeToResolution",
@@ -56,7 +56,7 @@ func init() {
 func getTimeToResStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
-	// initialize the vars map that we'll use when making our query for PR review contributions
+	// initialize the vars map that we'll use when making our query for closed PRs
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
@@ -70,7 +70,7 @@ func getTimeToResStats() map[string]interface{} {
 	endDateStr := endDateTime.Format(cmd.YearMonthDayFormatStr)
 	startDateTimeStr := startDateTime.Format(cmd.ISO8601_FormatStr)
 	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
-	// and initialize a list of durations that will be used to store the time to first
+	// and initialize a slice of durations that will be used to store the time to first
 	// response values
 	resolutionTimeList := []time.Duration{}
 	// loop over the input organization names

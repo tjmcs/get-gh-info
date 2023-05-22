@@ -16,7 +16,7 @@ import (
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
-// contribSummaryCmd represents the 'contribSummary' command
+// getClosedIssuesCmd represents the 'repo issues countClosed' command
 var (
 	getClosedIssuesCmd = &cobra.Command{
 		Use:   "countClosed",

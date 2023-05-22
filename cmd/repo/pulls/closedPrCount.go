@@ -16,7 +16,7 @@ import (
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
-// contribSummaryCmd represents the 'contribSummary' command
+// getClosedPrsCmd represents the 'repo pulls countClosed' command
 var (
 	getClosedPrsCmd = &cobra.Command{
 		Use:   "countClosed",
@@ -47,14 +47,14 @@ func init() {
 
 /*
  * define the function that is used to count the number of closed PRs in the
- * named GitHub organization(s); note that this function skips closed PRs that
- * include the 'backlog' label and only counts PRs in repositories that are
- * managed by the named team(s)
+ * named GitHub organization(s) that were closed in the defined time window;
+ * note that this function skips closed PRs that include the 'backlog' label
+ * and only counts PRs in repositories that are managed by the named team(s)
  */
 func getClosedPrCount() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
-	// initialize the vars map that we'll use when making our query for PR review contributions
+	// initialize the vars map that we'll use when making our query for closed PRs
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue

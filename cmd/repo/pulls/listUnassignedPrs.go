@@ -18,7 +18,7 @@ import (
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
-// contribSummaryCmd represents the 'contribSummary' command
+// listUnassignedPrsCmd represents the 'repo pulls listUnassigned' command
 var (
 	listUnassignedPrsCmd = &cobra.Command{
 		Use:   "listUnassigned",
@@ -48,9 +48,10 @@ func init() {
 }
 
 /*
- * define the function that is used to count the number of unassigned PRs in the
- * named GitHub organization(s); note that this function skips unassigned PRs that
- * include the 'backlog' label and only counts PRs in repositories that are
+ * define the function that is used to list the open PRs in the named GitHub
+ * organization(s) that were open during the defined timeframe and that had not
+ * been assigned to anyone at that time; note that this function skips open PRs
+ * that include the 'backlog' label and only lists PRs in repositories that are
  * managed by the named team(s)
  */
 func listUnassignedPrCount() []map[string]interface{} {

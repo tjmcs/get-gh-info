@@ -18,7 +18,7 @@ import (
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
-// contribSummaryCmd represents the 'contribSummary' command
+// listUnassignedIssuesCmd represents the 'repo issues listUnassigned' command
 var (
 	listUnassignedIssuesCmd = &cobra.Command{
 		Use:   "listUnassigned",
@@ -48,21 +48,22 @@ func init() {
 }
 
 /*
- * define the function that is used to count the number of unassigned issues in the
- * named GitHub organization(s); note that this function skips unassigned issues that
- * include the 'backlog' label and only counts issues in repositories that are
+ * define the function that is used to list the open issues in the named GitHub
+ * organization(s) that were open during the defined timeframe and that had not
+ * been assigned to anyone at that time; note that this function skips open issues
+ * that include the 'backlog' label and only lists issues in repositories that are
  * managed by the named team(s)
  */
 func listUnassignedIssueCount() []map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
-	// initialize the vars map that we'll use when making our query for issue review contributions
+	// initialize the vars map that we'll use when making our queries for issues
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
 	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
-	// and initialize a map that will be used to store counts for each of the named organizations
-	// and a total count
+	// and initialize a map that will be used to store the list of unassigned issues
+	// that we find
 	unassignedPrList := []map[string]interface{}{}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
