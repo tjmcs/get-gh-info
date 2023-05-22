@@ -267,8 +267,8 @@ func GetTeamRepos(inputTeamName ...string) (string, []string) {
 	}
 	// next, retrieve the mapping of teams to repositories that was either
 	// passed in on the command-line or read from the configuration file
-	repoMappingFile := viper.Get("repoMapping")
-	if repoMappingFile == nil {
+	repoMappingFile := viper.Get("repoMappingFile")
+	if repoMappingFile == nil || repoMappingFile == "" {
 		// if the repo mapping wasn't passed in on the command-line, and wasn't
 		// included in the configuration file, then use the default repo mapping
 		// (if it exists)

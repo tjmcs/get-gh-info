@@ -6,6 +6,7 @@ package cmd
 import (
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 const (
@@ -17,10 +18,10 @@ const (
 
 // rootCmd represents the base command when called without any subcommands
 var (
-	compTeam string
-	// used to exclude private repositories from the output
+	// used locally to exclude private repositories from the output
 	excludePrivate bool
-	RepoCmd        = &cobra.Command{
+	// and the repo command itself
+	RepoCmd = &cobra.Command{
 		Use:   "repo",
 		Short: "Gather repository-related data",
 		Long:  "The subcommand used as the root for all queries for repository-related data",
@@ -77,9 +78,11 @@ func init() {
 
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
+	RepoCmd.PersistentFlags().BoolVarP(&excludePrivate, "exclude-private-repos", "e", false, "exclude private repositories from output")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
+	viper.BindPFlag("excludePrivateRepos", RepoCmd.PersistentFlags().Lookup("exclude-private-repos"))
 }
