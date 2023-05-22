@@ -19,8 +19,8 @@ var (
 	ReferenceDate string
 	CompleteWeeks bool
 	// and a couple of others that are used in various subcommands
-	CompTeam       string
-	ExcludePrivate bool
+	CompTeam        string
+	RepoMappingFile string
 	// and some other global variables that are used locally to setup persistent flags
 	cfgFile    string
 	outputFile string

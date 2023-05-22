@@ -31,7 +31,7 @@ func init() {
 	IssuesCmd.PersistentFlags().StringVarP(&cmd.ReferenceDate, "ref-date", "d", "", "reference date for time window (YYYY-MM-DD)")
 	IssuesCmd.PersistentFlags().BoolVarP(&cmd.CompleteWeeks, "complete-weeks", "w", false, "only output complete weeks (starting Monday)")
 	IssuesCmd.PersistentFlags().StringVarP(&cmd.CompTeam, "team", "t", "", "name of team to restrict repository list to")
-	IssuesCmd.PersistentFlags().BoolVarP(&cmd.ExcludePrivate, "exclude-private-repos", "e", false, "exclude private repositories from output")
+	IssuesCmd.PersistentFlags().StringVarP(&cmd.RepoMappingFile, "repo-mapping-file", "m", "", "name of the repository mapping file to use")
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
@@ -41,6 +41,5 @@ func init() {
 	viper.BindPFlag("referenceDate", IssuesCmd.PersistentFlags().Lookup("ref-date"))
 	viper.BindPFlag("completeWeeks", IssuesCmd.PersistentFlags().Lookup("complete-weeks"))
 	viper.BindPFlag("teamName", IssuesCmd.PersistentFlags().Lookup("team"))
-	viper.BindPFlag("excludePrivateRepos", IssuesCmd.PersistentFlags().Lookup("exclude-private-repos"))
-
+	viper.BindPFlag("repoMappingFile", IssuesCmd.PersistentFlags().Lookup("repo-mapping-file"))
 }

@@ -18,8 +18,9 @@ import (
 
 // repoListCmd represents the 'repoList' command
 var (
-	searchPattern string
-	matchCmd      = &cobra.Command{
+	includeArchivedRepos bool
+	searchPattern        string
+	matchCmd             = &cobra.Command{
 		Use:   "match",
 		Short: "Show list of repositories that match the search criteria",
 		Long: `Constructs a list of all of the repositories in the named (set of) GitHub
@@ -39,14 +40,12 @@ func init() {
 	// Cobra supports Persistent Flags which will work for this command
 	// and all subcommands, e.g.:
 	matchCmd.Flags().StringVarP(&searchPattern, "search-pattern", "p", "", "pattern to match against repository names")
-	matchCmd.Flags().BoolVarP(&cmd.ExcludePrivate, "exclude-private-repos", "e", false, "exclude private repositories from output")
-	matchCmd.Flags().BoolVarP(&cmd.ExcludePrivate, "include-archived-repos", "i", false, "include archived repositories in output")
+	matchCmd.Flags().BoolVarP(&includeArchivedRepos, "include-archived-repos", "i", false, "include archived repositories in output")
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
 	viper.BindPFlag("searchPattern", matchCmd.Flags().Lookup("searchPattern"))
-	viper.BindPFlag("excludePrivateRepos", matchCmd.PersistentFlags().Lookup("exclude-private-repos"))
 	viper.BindPFlag("includeArchivedRepos", matchCmd.PersistentFlags().Lookup("include-archived-repos"))
 }
 

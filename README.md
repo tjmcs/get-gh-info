@@ -219,17 +219,18 @@ Available Commands:
   timeToResolution  Statistics for the 'time to resolution' of closed isues
 
 Flags:
-  -w, --complete-weeks          only output complete weeks (starting Monday)
-  -e, --exclude-private-repos   exclude private repositories from output
-  -h, --help                    help for issues
-  -l, --lookback-time string    'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)
-  -d, --ref-date string         reference date for time window (YYYY-MM-DD)
-  -t, --team string             name of team to restrict repository list to
+  -w, --complete-weeks             only output complete weeks (starting Monday)
+  -h, --help                       help for issues
+  -l, --lookback-time string       'lookback' time window (eg. 10d, 3w, 2m, 1q, 1y)
+  -d, --ref-date string            reference date for time window (YYYY-MM-DD)
+  -m, --repo-mapping-file string   name of the repository mapping file to use
+  -t, --team string                name of team to restrict repository list to
 
 Global Flags:
-  -c, --config string     configuration file to use
-  -f, --file string       file/stream for output (defaults to stdout)
-  -o, --org-list string   list of orgs to gather information from
+  -c, --config string           configuration file to use
+  -e, --exclude-private-repos   exclude private repositories from output
+  -f, --file string             file/stream for output (defaults to stdout)
+  -o, --org-list string         list of orgs to gather information from
 
 Use "getGhInfo repo issues [command] --help" for more information about a command.
 ```
@@ -260,11 +261,15 @@ As you can clearly see, there are a number of subcommands defined for the `issue
 
 * **The `listUnassigned` subcommand**: this subcommand returns a list of the issues (or pull requests in the case of the `pulls` subcommand) that were open at some point during the defined time window for all repositories in the named GitHub organization (or organizations) and that did not have anyone assigned to work on them. As is the case with the `listOpen` subcommand (above), the output is sorted (from greatest to least) by the age of each open issue (and the meta-data returned is identical to that returned by the `listOpen` subcommand)
 
-All of these subcommands support the same set of command-line flags, which are mainly focused on defining a time window for the issues (or pull requests) that we are interested in (see the next section for more detail on those command-line flags and how they can be used to specify that time window), but there is one flag used for these subcommands that deserves a bit more discussion, the `-t, --team` string.
+All of these subcommands support the same set of command-line flags, which are mainly focused on defining a time window for the issues (or pull requests) that we are interested in (see the next section for more detail on those command-line flags and how they can be used to specify that time window), but there are two flags used for both of these subcommands that deserve a bit more discussion, the `-t, --team` flag and the `-m, --repo-mapping-file` flag.
 
 ##### The `-t, --team` flag
 
 This flag can be used to define the team that owns the list of repositories that we want to gather information about. This team name is used to determine the list of repositories that we are interested in gathering information for (based on a list of repositories pulled in from a repository mapping file, see the next section for details) and the members of the team in that "owns" those repositories (based on the users defined to be a part of that team in the configuration file embedded in this repository). As such, this flag can be quite useful for restricting the list of repositories that we would like to calculate statistics for (or gather information from). If this flag is not specified, the default team defined in the configuration file is used as the `team` for all of these subcommands.
+
+##### The `-m, --repo-mapping-file` flag
+
+This flag can be used to specify the repository mapping file that will be used to map teams to lists of repositories (see the next section of this document for more information on how that file should be structured and how it's used). By default, the file specified in the `default_repo_mapping` key in the configuration file will be used if this flag is not used to override that value, but if that value (currently set to the string `../cpe-datasets/repositories.yml`) does not match the location of your repository mapping file, this flag can be used to point to wherever you have saved your repository mapping file locally.
 
 #### Mapping teams to repositories
 
