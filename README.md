@@ -213,6 +213,7 @@ Available Commands:
   countClosed       Count of closed issues in the named GitHub organization(s)
   countOpen         Count of open issues in the named GitHub organization(s)
   firstResponseTime Statistics for the 'time to first response' of open isues
+  listClosed        List the closed issues in the named GitHub organization(s)
   listOpen          List the open issues in the named GitHub organization(s)
   listUnassigned    List the unassigned and open issues in the named GitHub organization(s)
   staleness         Statistics for the time since the last response for open PRs
@@ -259,6 +260,16 @@ As you can clearly see, there are a number of subcommands defined for the `issue
 
   With this information, the user should be able to filter out the issues that they are interested in using external tools (like `jq`)
 
+* **The `listClosed` subcommand**: this subcommand returns a list of the issues (or pull requests in the case of the `pulls` subcommand) that were closed during the defined time window for all repositories in the named GitHub organization (or organizations) sorted (from greatest to least) by the age of each open issue. The output includes
+
+  * the URL for the issue
+  * the issue's title, date-time when it was created, and age
+  * a flag indicating if the issues is currently open or closed, along with the date-time when it was closed
+  * the creator of the issue (by GitHub ID) along with some associated meta-data (the company that they work at and their email) if that information is included in their GitHub profile
+  * a comma-separated list of assignees for that issue
+
+  With this information, the user should be able to filter out the issues that they are interested in using external tools (like `jq`)
+
 * **The `listUnassigned` subcommand**: this subcommand returns a list of the issues (or pull requests in the case of the `pulls` subcommand) that were open at some point during the defined time window for all repositories in the named GitHub organization (or organizations) and that did not have anyone assigned to work on them. As is the case with the `listOpen` subcommand (above), the output is sorted (from greatest to least) by the age of each open issue (and the meta-data returned is identical to that returned by the `listOpen` subcommand)
 
 All of these subcommands support the same set of command-line flags, which are mainly focused on defining a time window for the issues (or pull requests) that we are interested in (see the next section for more detail on those command-line flags and how they can be used to specify that time window), but there are two flags used for both of these subcommands that deserve a bit more discussion, the `-t, --team` flag and the `-m, --repo-mapping-file` flag.
@@ -271,7 +282,7 @@ This flag can be used to define the team that owns the list of repositories that
 
 This flag can be used to specify the repository mapping file that will be used to map teams to lists of repositories (see the next section of this document for more information on how that file should be structured and how it's used). By default, the file specified in the `default_repo_mapping` key in the configuration file will be used if this flag is not used to override that value, but if that value (currently set to the string `../cpe-datasets/repositories.yml`) does not match the location of your repository mapping file, this flag can be used to point to wherever you have saved your repository mapping file locally.
 
-#### Mapping teams to repositories
+### Mapping teams to repositories
 
 As was mentioned previously, the value specified for the team using this flag is used, in combination with the teams defined in the configuration file for this application and a "repository mapping" file that maps a list of repositories to the teams that manage those repositories, to construct a list of repositories that we are interested in gathering data for. In order for this process this to work correctly, the teams defined in the configuration file for this application need to match the teams defined in the repository mapping file (by name), and the repository mapping file needs to look something like this:
 

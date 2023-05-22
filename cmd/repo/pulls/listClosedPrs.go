@@ -9,7 +9,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
@@ -19,23 +18,23 @@ import (
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
-// listOpenPrsCmd represents the 'repo pulls listOpen' command
+// listClosedPrsCmd represents the 'repo pulls listClosed' command
 var (
-	listOpenPrsCmd = &cobra.Command{
-		Use:   "listOpen",
-		Short: "List the open PRs in the named GitHub organization(s)",
-		Long: `Constructs a list (sorted by age) of the of open PRs in the named
-GitHub organization in the defined time window (skipping any PRs that include
-the 'backlog' label and only including PRs from repositories that are managed
-by the named team)`,
+	listClosedPrsCmd = &cobra.Command{
+		Use:   "listClosed",
+		Short: "List the closed PRs in the named GitHub organization(s)",
+		Long: `Constructs a list (sorted by age) of the of the PRs in the named
+GitHub organization that were closed in the defined time window (skipping any PRs
+that include the 'backlog' label and only including PRs from repositories that are
+managed by the named team)`,
 		Run: func(cmd *cobra.Command, args []string) {
-			utils.DumpMapAsJSON(listOpenPrCount())
+			utils.DumpMapAsJSON(listClosedPrCount())
 		},
 	}
 )
 
 func init() {
-	repo.PullsCmd.AddCommand(listOpenPrsCmd)
+	repo.PullsCmd.AddCommand(listClosedPrsCmd)
 
 	// Here you will define your flags and configuration settings.
 
@@ -49,21 +48,21 @@ func init() {
 }
 
 /*
- * define the function that is used to list the open PRs in the named GitHub
- * organization(s) that were open during the defined timeframe; note that this
- * function skips open PRs that include the 'backlog' label and only lists
+ * define the function that is used to list the closed PRs in the named GitHub
+ * organization(s) that were closed during the defined time window; note that
+ * this function skips closed PRs that include the 'backlog' label and only counts
  * PRs in repositories that are managed by the named team(s)
  */
-func listOpenPrCount() []map[string]interface{} {
+func listClosedPrCount() []map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
-	// initialize the vars map that we'll use when making our queries for PRs
+	// initialize the vars map that we'll use when making our query closed PRs
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
 	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
-	// and initialize a slice that will be used to store the list of open PRs that we find
-	openPrList := []map[string]interface{}{}
+	// and initialize a slice that will be used to store the list of closed PRs that we find
+	closedPrList := []map[string]interface{}{}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
 	// should we filter out private repositories?
@@ -77,16 +76,11 @@ func listOpenPrCount() []map[string]interface{} {
 	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
-		// define a couple of queries to run for each organization; the first is used to query
-		// for open PRs that were created before the end of our time window, the second is used
-		// to query for closed PRs that were created before the end time and closed after the
-		// start time of our query window
-		openQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:open -label:backlog created:<%s",
-			orgName, endDateTimeStr))
-		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog created:<%s closed:>%s",
-			orgName, endDateTimeStr, startDateTimeStr))
+		// define the query to run for each organization; this query looks for closed PRs
+		// that were closed within the defined time window
+		closedQuery := githubv4.String(fmt.Sprintf("org:%s type:pr state:closed -label:backlog closed:%s..%s", orgName,
+			startDateTimeStr, endDateTimeStr))
 		queries := map[string]githubv4.String{
-			"open":   openQuery,
 			"closed": closedQuery,
 		}
 		// loop over the queries that we want to run for this organization, gathering
@@ -100,7 +94,7 @@ func listOpenPrCount() []map[string]interface{} {
 			var err error
 			var edges prSearchEdges
 			var pageInfo cmd.PageInfo
-			// loop over the pages of results until we've reached the end of the list of open
+			// loop over the pages of results until we've reached the end of the list of closed
 			// PRs for this organization
 			for {
 				// set the "after" field to our current "lastCursor" value
@@ -133,8 +127,8 @@ func listOpenPrCount() []map[string]interface{} {
 				for _, edge := range edges {
 					// define a variable to that references the pull request itself
 					pullRequest := edge.Node.PullRequest
-					// if the current repository is managed by the team we're interested in, then increment the
-					// open PR count for the current organization
+					// if the current repository is managed by the team we're interested in, then check to see
+					// if we should add this PR to our list of closed PRs
 					if len(pullRequest.Repository.Name) > 0 {
 						orgAndRepoName := orgName + "/" + pullRequest.Repository.Name
 						idx := utils.FindIndexOf(orgAndRepoName, repositoryList)
@@ -164,16 +158,10 @@ func listOpenPrCount() []map[string]interface{} {
 						for _, assignee := range pullRequest.Assignees.Edges {
 							assigneeList = append(assigneeList, assignee.Node.Login)
 						}
-						// determine the age of this PR (which will be the time from when the PR was
-						// created to either the time it was closed if it's closed or to the the end
-						// of our time window if it's still open
-						var prAge time.Duration
-						if pullRequest.Closed {
-							prAge = pullRequest.ClosedAt.Time.Sub(pullRequest.CreatedAt.Time)
-						} else {
-							prAge = endDateTime.Sub(pullRequest.CreatedAt.Time)
-						}
-						openPrList = append(openPrList, map[string]interface{}{
+						// determine the age of this PR (the time from when the PR was created to
+						// the time it was closed)
+						prAge := pullRequest.ClosedAt.Time.Sub(pullRequest.CreatedAt.Time)
+						closedPrList = append(closedPrList, map[string]interface{}{
 							"createdAt":       pullRequest.CreatedAt.Time,
 							"closed":          pullRequest.Closed,
 							"closedAt":        pullRequest.ClosedAt.Time,
@@ -199,16 +187,16 @@ func listOpenPrCount() []map[string]interface{} {
 			delete(vars, "after")
 		} // end of loop over queries
 	}
-	// print a message indicating the total number of open PRs found
-	numOpenPrs := len(openPrList)
-	fmt.Fprintf(os.Stderr, "\nFound %d open PRs in repositories managed by the '%s' team between %s and %s\n", numOpenPrs,
+	// print a message indicating the total number of closed PRs found
+	numOpenPrs := len(closedPrList)
+	fmt.Fprintf(os.Stderr, "\nFound %d closed PRs in repositories managed by the '%s' team between %s and %s\n", numOpenPrs,
 		teamName, startDateStr, endDateStr)
-	// If we have more than one open PR, then sort the list of open PRs by the age of each PR
+	// If we have more than one closed PR, then sort the list of closed PRs by the age of each PR
 	if numOpenPrs > 1 {
-		sort.Slice(openPrList, func(i, j int) bool {
-			return openPrList[i]["age"].(utils.JsonDuration).Duration > openPrList[j]["age"].(utils.JsonDuration).Duration
+		sort.Slice(closedPrList, func(i, j int) bool {
+			return closedPrList[i]["age"].(utils.JsonDuration).Duration > closedPrList[j]["age"].(utils.JsonDuration).Duration
 		})
 	}
 	// and return it
-	return openPrList
+	return closedPrList
 }

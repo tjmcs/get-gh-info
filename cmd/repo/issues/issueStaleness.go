@@ -17,7 +17,7 @@ import (
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
-// contribSummaryCmd represents the 'contribSummary' command
+// getStalenessStatsCmd represents the 'repo issues staleness' command
 var (
 	getStalenessStatsCmd = &cobra.Command{
 		Use:   "staleness",
@@ -59,7 +59,7 @@ func init() {
 func getStalenessStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
-	// initialize the vars map that we'll use when making our query for PR review contributions
+	// initialize the vars map that we'll use when making our queries for issues
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
@@ -85,8 +85,8 @@ func getStalenessStats() map[string]interface{} {
 	endDateStr := endDateTime.Format(cmd.YearMonthDayFormatStr)
 	startDateTimeStr := startDateTime.Format(cmd.ISO8601_FormatStr)
 	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
-	// and initialize a list of durations that will be used to store the time to first
-	// response values
+	// and initialize a slice of durations that will be used to store the time since
+	// last response (or staleness) values
 	stalenessTimeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
@@ -104,7 +104,7 @@ func getStalenessStats() map[string]interface{} {
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
-		for queryType, query := range queries {
+		for _, query := range queries {
 			// add the query string to use with this query to the vars map
 			vars["query"] = query
 			// initialize the flag that we use to determine if we're trying to retrieve
@@ -169,15 +169,9 @@ func getStalenessStats() map[string]interface{} {
 						}
 						// if we got this far, then the current repository is managed by the team we're interested in,
 						// so look for the time since we last had a response from a member of the team; first, initialize
-						// a variable to hold the difference between either the time the issue was closed (for interim
-						// queries) or the end of our query window (for other query types) and the creation time for
+						// a variable to hold the difference between the end of our query window and the creation time for
 						// this issue
-						var stalenessTime time.Duration
-						if queryType == "interim" {
-							stalenessTime = issue.ClosedAt.Time.Sub(issueCreatedAt.Time)
-						} else {
-							stalenessTime = endDateTime.Time.Sub(issueCreatedAt.Time)
-						}
+						stalenessTime := endDateTime.Time.Sub(issueCreatedAt.Time)
 						// if no comments were found for this issue, then use the default staleness time
 						if len(issue.Comments.Nodes) == 0 {
 							stalenessTimeList = append(stalenessTimeList, stalenessTime)
@@ -210,6 +204,11 @@ func getStalenessStats() map[string]interface{} {
 										comment.AuthorAssociation != "COLLABORATOR" {
 										continue
 									}
+								}
+								// if the comment was created after the end of our query window, we can't count
+								// this comment as occuring before the end of our query window, so skip it
+								if comment.CreatedAt.After(endDateTime.Time) {
+									continue
 								}
 								// if get here, then we've found a comment from a member of the team,
 								// so use the time the comment was created to calculate a staleness

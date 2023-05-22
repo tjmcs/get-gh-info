@@ -16,7 +16,7 @@ import (
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
-// contribSummaryCmd represents the 'contribSummary' command
+// getOpenPrsCmd represents the 'repo pulls countOpen' command
 var (
 	getOpenPrsCmd = &cobra.Command{
 		Use:   "countOpen",
@@ -100,7 +100,7 @@ var prSearchQuery struct {
 func getOpenPrCount() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
-	// initialize the vars map that we'll use when making our query for PR review contributions
+	// initialize the vars map that we'll use when making our queries for PRs
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue

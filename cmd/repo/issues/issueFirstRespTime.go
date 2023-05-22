@@ -17,7 +17,7 @@ import (
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
-// contribSummaryCmd represents the 'contribSummary' command
+// getFirstRespTimeStatsCmd represents the 'repo issues firstResponseTime' command
 var (
 	getFirstRespTimeStatsCmd = &cobra.Command{
 		Use:   "firstResponseTime",
@@ -59,7 +59,7 @@ func init() {
 func getFirstRespTimeStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
-	// initialize the vars map that we'll use when making our query for PR review contributions
+	// initialize the vars map that we'll use when making our queries for issues
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
@@ -84,7 +84,7 @@ func getFirstRespTimeStats() map[string]interface{} {
 	endDateStr := endDateTime.Format(cmd.YearMonthDayFormatStr)
 	startDateTimeStr := startDateTime.Format(cmd.ISO8601_FormatStr)
 	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
-	// and initialize a list of durations that will be used to store the time to first
+	// and initialize a slice of durations that will be used to store the time to first
 	// response values
 	firstRespTimeList := []time.Duration{}
 	// loop over the input organization names
@@ -103,7 +103,7 @@ func getFirstRespTimeStats() map[string]interface{} {
 		}
 		// loop over the queries that we want to run for this organization, gathering
 		// the results for each query
-		for queryType, query := range queries {
+		for _, query := range queries {
 			// add the query string to use with this query to the vars map
 			vars["query"] = query
 			// initialize the flag that we use to determine if we're trying to retrieve
@@ -205,12 +205,10 @@ func getFirstRespTimeStats() map[string]interface{} {
 										continue
 									}
 								}
-								// if the comment was created after the end of our query window (or if it's an
-								// interim query and the comment was created after the issue was closed), then
-								// we've reached the end of the time where a user could have responded within our
-								// time window, so just use the default we defined (above)
-								if (queryType == "interim" && comment.CreatedAt.After(issue.ClosedAt.Time)) ||
-									comment.CreatedAt.After(endDateTime.Time) {
+								// if the comment was created after the end of our query window, then we've reached
+								// the end of the time where a user could have responded within our time window, so
+								// just use the default we defined (above)
+								if comment.CreatedAt.After(endDateTime.Time) {
 									break
 								}
 								// if get here, then we've found a comment from a member of the team that was

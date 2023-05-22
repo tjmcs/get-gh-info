@@ -17,7 +17,7 @@ import (
 	"github.com/tjmcs/get-gh-info/utils"
 )
 
-// contribSummaryCmd represents the 'contribSummary' command
+// getAgeStatsCmd represents the 'repo pulls age' command
 var (
 	getAgeStatsCmd = &cobra.Command{
 		Use:   "age",
@@ -48,15 +48,14 @@ func init() {
 
 /*
  * define the function that is used to calculate the statistics associated with
- * the "time to first response" for any open PRs in the named GitHub organization(s);
- * note that this function skips open PRs that include the 'backlog' label and only
- * includes first response times for PRs in repositories that are managed by the
- * named team(s)
+ * the "age" for any open PRs in the named GitHub organization(s); note that this
+ * function skips open PRs that include the 'backlog' label and only includes
+ * ages for PRs in repositories that are managed by the named team(s)
  */
 func getAgeStats() map[string]interface{} {
 	// first, get a new GitHub GraphQL API client
 	client := utils.GetAuthenticatedClient()
-	// initialize the vars map that we'll use when making our query for PR review contributions
+	// initialize the vars map that we'll use when making our queries for PRs
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
@@ -72,8 +71,7 @@ func getAgeStats() map[string]interface{} {
 	endDateStr := endDateTime.Format(cmd.YearMonthDayFormatStr)
 	startDateTimeStr := startDateTime.Format(cmd.ISO8601_FormatStr)
 	endDateTimeStr := endDateTime.Format(cmd.ISO8601_FormatStr)
-	// and initialize a list of durations that will be used to store the time to first
-	// response values
+	// and initialize a slice of durations that will be used to store the age values
 	prAgeList := []time.Duration{}
 	// loop over the input organization names
 	for _, orgName := range utils.GetOrgNameList() {
