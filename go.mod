@@ -4,6 +4,7 @@ go 1.17
 
 require (
 	github.com/deckarep/golang-set v1.8.0
+	github.com/gobwas/glob v0.2.3
 	github.com/shurcooL/githubv4 v0.0.0-20220115235240-a14260e6f8a2
 	github.com/spf13/cobra v1.3.0
 	github.com/spf13/viper v1.10.0
