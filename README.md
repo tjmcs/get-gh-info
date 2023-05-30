@@ -164,7 +164,7 @@ In addition to these flags, there are also a set of three flags in the help outp
 
 The first subcommand for the `repo` command is one that can be used to gather information about the repositories that are available in the named list of GitHub organizations.  The usage for this subcommand is quite simple, although we might extend this subcommand in the future and add more capabilities:
 ```bash
-$ go run getGhInfo.go repo match --help
+$ go run . repo match --help
 Constructs a list of all of the repositories in the named (set of) GitHub
 organization(s) that have a name matching the define search pattern
 passed in by the user.
@@ -173,15 +173,16 @@ Usage:
   getGhInfo repo match [flags]
 
 Flags:
-  -e, --exclude-private-repos    exclude private repositories from output
+  -g, --glob-style-pattern       interpret the pattern as a glob-style pattern
   -h, --help                     help for match
   -i, --include-archived-repos   include archived repositories in output
   -p, --search-pattern string    pattern to match against repository names
 
 Global Flags:
-  -c, --config string     configuration file to use
-  -f, --file string       file/stream for output (defaults to stdout)
-  -o, --org-list string   list of orgs to gather information from
+  -c, --config string           configuration file to use
+  -e, --exclude-private-repos   exclude private repositories from output
+  -f, --file string             file/stream for output (defaults to stdout)
+  -o, --org-list string         list of orgs to gather information from
 ```
 
 As you can see, there are a few flags that can be set to control the output of this command, specifically:
@@ -197,6 +198,10 @@ This flag can be used include information about archived repositories from the o
 ##### The `-p, --search-pattern` flag
 
 This flag can be used to define the search pattern (as a regular expression) that the repository name must match if the information from that repository is to be included in the output of this subcommand. By default, if a value for the pattern that must be matched is not passed in using this flag, information will be returned for **all** repositories in the named GitHub organization (or organizations), but if it is set then information will be returned **only** for repositories who's names match the pattern passed in using this flag.
+
+##### The `-g, --glob-style-pattern` flag
+
+When this flag is included on the command line, the application will attempt to match the repositories found against the search pattern (see above), interpreting that search pattern as a glob-syle pattern instead of the default behavior of interpreting that search pattern as a regular expression. In some situations, this might make defining a pattern to match against simpler.
 
 ### The `issues` and `pulls` repository subcommands
 
