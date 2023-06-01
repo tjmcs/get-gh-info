@@ -116,10 +116,10 @@ func summaryOfContribs() map[string]interface{} {
 		// for the entire team
 		if utils.SliceContains(userIdList, gitHubIdStr) {
 			contribByUserSummary[gitHubIdStr] = map[string]interface{}{
-				"pullReqContribs":                totalPullReqContribs,
-				"reposWithContribPullReqs":       totalReposWithContribPullReqs,
-				"pullReqReviewContribs":          totalPullReqReviewContribs,
-				"reposWithContribPullReqReviews": totalReposWithContribPullReqReviews,
+				"pullReqContribs":                 totalPullReqContribs,
+				"reposWithPullReqContribs":        totalReposWithContribPullReqs,
+				"pullReqReviewContribs":           totalPullReqReviewContribs,
+				"reposWithPullReqReviewsContribs": totalReposWithContribPullReqReviews,
 			}
 		}
 		// add current user contributions (weighted by the number of input GitHub users)
@@ -137,13 +137,13 @@ func summaryOfContribs() map[string]interface{} {
 			userMap["teamPcntPullReqContribs"] = math.Round(((float64(userMap["pullReqContribs"].(int)))/avgPullReqContribs)*10000) / 100
 		}
 		if avgReposWithContribPullReqs != 0 {
-			userMap["teamPcntReposWithContribPullReqs"] = math.Round(((float64(userMap["reposWithContribPullReqs"].(int)))/avgReposWithContribPullReqs)*10000) / 100
+			userMap["teamPcntReposWithContribPullReqs"] = math.Round(((float64(userMap["reposWithPullReqContribs"].(int)))/avgReposWithContribPullReqs)*10000) / 100
 		}
 		if avgPullReqReviewContribs != 0 {
 			userMap["teamPcntPullReqReviewContribs"] = math.Round(((float64(userMap["pullReqReviewContribs"].(int)))/avgPullReqReviewContribs)*10000) / 100
 		}
 		if avgReposWithContribPullReqReviews != 0 {
-			userMap["teamPcntReposWithContribPullReqReviews"] = math.Round(((float64(userMap["reposWithContribPullReqReviews"].(int)))/avgReposWithContribPullReqReviews)*10000) / 100
+			userMap["teamPcntReposWithContribPullReqReviews"] = math.Round(((float64(userMap["reposWithPullReqReviewsContribs"].(int)))/avgReposWithContribPullReqReviews)*10000) / 100
 		}
 	}
 
