@@ -287,6 +287,18 @@ You can use this flag to define the team that owns the list of repositories that
 
 You can use this flag to specify the repository mapping file that's used to map teams to lists of repositories (see the next section of this document for more information on the structure of that file and how it's used). By default, the app uses the file specified in the `default_repo_mapping` key in the associated configuration file if this flag isn't used to override that value, but if that value (currently set to the string `../cpe-datasets/repositories.yml`) doesn't match the location of your repository mapping file, you must use this flag to point to wherever you saved your own repository mapping file locally.
 
+##### The `-r, --restrict-to-team` flag
+
+You can use this flag with the `firstResponseTime`, `staleness`, and `listOpen` sub-commands in situations where you only want to include responses to issues/PRs from the team passed in on the command line using the `-t, --team` flag (described previously) when determining the time to first response or time since the last response (staleness) value (or when determining these same values for sorting when listing open issues using the `listOpen` sub-command).
+
+##### The `-p, --by-first-response` flag
+
+You can use this flag with the `listOpen`  sub-command in situations where you want to sort the output lists of issues/PRs that were open in a given time period by the time to first response rather than by the age of those issues/PRs (which is the default if this flag or the corresponding `-s, --by-staleness` flag shown below aren't used). Note that you can use either this flag **or** the corresponding `-s, --by-staleness` flag; if you pass in both of these flags together the app throws an error and exits. 
+
+##### The `-s, --by-staleness` flag
+
+You can use this flag with the `listOpen`  sub-command in situations where you want to sort the output lists of issues or PRs that were open in a given time period by the time to since the last response rather than by the age of those issues or PRs (which is the default if this flag or the corresponding `-p, --by-first-response` flag shown previously aren't used). Note that you can use either this flag **or** the corresponding `-p, --by-first-response` flag; if you pass in both of these flags together the app throws an error and exits. 
+
 ### Mapping teams to repositories
 
 As mentioned previously, the app uses a defined team name, in combination with the teams defined in the associated configuration file and a "repository mapping" file that maps the repositories listed in that file to the teams that manage them. With that mapping in place, the app constructs a list of repositories to gather data for based on the values you passed in for these arguments on the command-line. In order for this process this to work correctly, the teams defined in the configuration file for this app need to match the teams defined in the repository mapping file (by name), and the repository mapping file needs to look something like this:
