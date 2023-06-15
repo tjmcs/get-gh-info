@@ -111,7 +111,7 @@ func getFirstRespTimeStats() map[string]interface{} {
 			firstPage := true
 			// and a few other variables that we'll use to query the system for results
 			var err error
-			var edges issueSearchEdges
+			var edges repo.IssueSearchEdges
 			var pageInfo cmd.PageInfo
 			// loop over the pages of results from this query until we've reached the end
 			// of the list of issues that matched
@@ -119,9 +119,9 @@ func getFirstRespTimeStats() map[string]interface{} {
 				// run our query and add the data we want from the query results to the
 				// repositoryList map
 				if firstPage {
-					err = client.Query(context.Background(), &firstIssueSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.FirstIssueSearchQuery, vars)
 				} else {
-					err = client.Query(context.Background(), &issueSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.IssueSearchQuery, vars)
 				}
 				if err != nil {
 					// Handle error.
@@ -131,15 +131,15 @@ func getFirstRespTimeStats() map[string]interface{} {
 				// grab out the list of edges and the page info from the results of our search
 				// and loop over the edges
 				if firstPage {
-					edges = firstIssueSearchQuery.Search.Edges
-					pageInfo = firstIssueSearchQuery.Search.PageInfo
-					// set firstPage to false so that we'll use the issueSearchQuery struct
+					edges = repo.FirstIssueSearchQuery.Search.Edges
+					pageInfo = repo.FirstIssueSearchQuery.Search.PageInfo
+					// set firstPage to false so that we'll use the repo.IssueSearchQuery struct
 					// (and it's "after" value) for subsequent queries
 					firstPage = false
 					fmt.Fprintf(os.Stderr, ".")
 				} else {
-					edges = issueSearchQuery.Search.Edges
-					pageInfo = issueSearchQuery.Search.PageInfo
+					edges = repo.IssueSearchQuery.Search.Edges
+					pageInfo = repo.IssueSearchQuery.Search.PageInfo
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
@@ -167,60 +167,9 @@ func getFirstRespTimeStats() map[string]interface{} {
 							continue
 						}
 						// if we got this far, then the current repository is managed by the team we're interested in,
-						// so look for the first response from a member of the team; first, initialize a variable to
-						// hold the difference between either the time the issue was closed or the end of our query window
-						// (if it was not closed by the end of the time window) and the creation time for this issue
-						var firstRespTime time.Duration
-						if issue.Closed {
-							firstRespTime = issue.ClosedAt.Time.Sub(issue.CreatedAt.Time)
-						} else {
-							firstRespTime = endDateTime.Time.Sub(issue.CreatedAt.Time)
-						}
-						// if no comments were found for this issue, then use the default time we just defined
-						if len(issue.Comments.Nodes) == 0 {
-							firstRespTimeList = append(firstRespTimeList, firstRespTime)
-							continue
-						}
-						// loop over the comments for this issue, looking for the first comment from a team member
-						for _, comment := range issue.Comments.Nodes {
-							// if the comment has an author (it should)
-							if len(comment.Author.Login) > 0 {
-								// if the flag to only count comments from the immediate team was
-								// set, then only count comments from immediate team members
-								if commentsFromTeamOnly {
-									// if here, looking only for comments only from immediate team members,
-									// so if this comment is not from an immediate team member skip it
-									idx := utils.FindIndexOf(comment.Author.Login, teamMemberIds)
-									if idx < 0 {
-										continue
-									}
-								} else {
-									// otherwise (by default), we're looking for comments from anyone who is
-									// an owner of this repository, a member of the organization that owns this
-									// repository, or collaborator on this repository; if that's not the case
-									// for this comment, then skip it
-									if comment.AuthorAssociation != "OWNER" &&
-										comment.AuthorAssociation != "MEMBER" &&
-										comment.AuthorAssociation != "COLLABORATOR" {
-										continue
-									}
-								}
-								// if the comment was created after the end of our query window, then we've reached
-								// the end of the time where a user could have responded within our time window, so
-								// just use the default we defined (above)
-								if comment.CreatedAt.After(endDateTime.Time) {
-									break
-								}
-								// if get here, then we've found a comment from a member of the team that was
-								// created before the end of our query window, so calculate the time to first
-								// response and break out of the loop
-								firstRespTime = comment.CreatedAt.Time.Sub(issueCreatedAt.Time)
-								break
-							}
-						}
-						// and append this first response time to the list of first response times
+						// so get the first response time for this issue and add it to the list
+						firstRespTime := repo.GetFirstResponseTime(&issue, endDateTime, commentsFromTeamOnly, teamMemberIds)
 						firstRespTimeList = append(firstRespTimeList, firstRespTime)
-						// if we found a comment from a member of the team, calculate the time to first response
 					}
 				}
 				// if we've reached the end of the list of contributions, break out of the loop

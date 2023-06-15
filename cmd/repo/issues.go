@@ -4,6 +4,7 @@ Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 package repo
 
 import (
+	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tjmcs/get-gh-info/cmd"
@@ -20,6 +21,59 @@ var (
 		Long:  "The subcommand used as the root for all queries for issue-related data",
 	}
 )
+
+/*
+ * Define a few types that we can use to define (ane extract data from) the body of the GraphQL
+ * query that will be used to retrieve the list of open issues in the named GitHub organization(s)
+ */
+type Issue struct {
+	cmd.IssueOrPrBase
+}
+type IssueSearchEdges []struct {
+	Cursor githubv4.String
+	Node   struct {
+		Issue `graphql:"... on Issue"`
+	}
+}
+type issueSearchBody struct {
+	IssueCount githubv4.Int
+	Edges      IssueSearchEdges
+	PageInfo   cmd.PageInfo
+}
+
+/*
+ * define a pair of structs that can be used to query GitHub for a list of all of the
+ * open PRs in a given organization (by name) that match a given query; the first is
+ * used to query for the first page of results and the second is used to query for
+ * subsequent pages of results
+ */
+var FirstIssueSearchQuery struct {
+	Search struct {
+		issueSearchBody
+	} `graphql:"search(first: $first, query: $query, type: $type)"`
+}
+
+var IssueSearchQuery struct {
+	Search struct {
+		issueSearchBody
+	} `graphql:"search(first: $first, after: $after, query: $query, type: $type)"`
+}
+
+/*
+ * define a few functions to get the values we'll need from the underling Issue
+ */
+func (i *Issue) IsClosed() bool {
+	return i.Closed
+}
+func (i *Issue) GetCreatedAt() githubv4.DateTime {
+	return i.CreatedAt
+}
+func (i *Issue) GetClosedAt() githubv4.DateTime {
+	return i.ClosedAt
+}
+func (i *Issue) GetComments() cmd.Comments {
+	return i.Comments
+}
 
 func init() {
 	cmd.RepoCmd.AddCommand(IssuesCmd)

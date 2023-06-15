@@ -92,7 +92,7 @@ func getTimeToResStats() map[string]interface{} {
 			firstPage := true
 			// and a few other variables that we'll use to query the system for results
 			var err error
-			var edges prSearchEdges
+			var edges repo.PrSearchEdges
 			var pageInfo cmd.PageInfo
 			// loop over the pages of results from this query until we've reached the end
 			// of the list of PRs that matched
@@ -100,9 +100,9 @@ func getTimeToResStats() map[string]interface{} {
 				// run our query and add the data we want from the query results to the
 				// repositoryList map
 				if firstPage {
-					err = client.Query(context.Background(), &firstPrSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.FirstPrSearchQuery, vars)
 				} else {
-					err = client.Query(context.Background(), &prSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.PrSearchQuery, vars)
 				}
 				if err != nil {
 					// Handle error.
@@ -112,15 +112,15 @@ func getTimeToResStats() map[string]interface{} {
 				// grab out the list of edges and the page info from the results of our search
 				// and loop over the edges
 				if firstPage {
-					edges = firstPrSearchQuery.Search.Edges
-					pageInfo = firstPrSearchQuery.Search.PageInfo
-					// set firstPage to false so that we'll use the prSearchQuery struct
+					edges = repo.FirstPrSearchQuery.Search.Edges
+					pageInfo = repo.FirstPrSearchQuery.Search.PageInfo
+					// set firstPage to false so that we'll use the repo.PrSearchQuery struct
 					// (and it's "after" value) for subsequent queries
 					firstPage = false
 					fmt.Fprintf(os.Stderr, ".")
 				} else {
-					edges = prSearchQuery.Search.Edges
-					pageInfo = prSearchQuery.Search.PageInfo
+					edges = repo.PrSearchQuery.Search.Edges
+					pageInfo = repo.PrSearchQuery.Search.PageInfo
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {

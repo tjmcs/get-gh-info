@@ -4,6 +4,7 @@ Copyright © 2023 NAME HERE <EMAIL ADDRESS>
 package repo
 
 import (
+	"github.com/shurcooL/githubv4"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/tjmcs/get-gh-info/cmd"
@@ -17,6 +18,59 @@ var (
 		Long:  "The subcommand used as the root for all queries for PR-related data",
 	}
 )
+
+/*
+ * Define a few types that we can use to define (ane extract data from) the body of the GraphQL
+ * query that will be used to retrieve the list of open PRs in the named GitHub organization(s)
+ */
+type PullRequest struct {
+	cmd.IssueOrPrBase
+}
+type PrSearchEdges []struct {
+	Cursor githubv4.String
+	Node   struct {
+		PullRequest `graphql:"... on PullRequest"`
+	}
+}
+type prSearchBody struct {
+	IssueCount githubv4.Int
+	Edges      PrSearchEdges
+	PageInfo   cmd.PageInfo
+}
+
+/*
+ * define a pair of structs that can be used to query GitHub for a list of all of the
+ * open PRs in a given organization (by name) that match a given query; the first is
+ * used to query for the first page of results and the second is used to query for
+ * subsequent pages of results
+ */
+var FirstPrSearchQuery struct {
+	Search struct {
+		prSearchBody
+	} `graphql:"search(first: $first, query: $query, type: $type)"`
+}
+
+var PrSearchQuery struct {
+	Search struct {
+		prSearchBody
+	} `graphql:"search(first: $first, after: $after, query: $query, type: $type)"`
+}
+
+/*
+ * define a few functions to get the values we'll need from the underling PullRequest
+ */
+func (p *PullRequest) IsClosed() bool {
+	return p.Closed
+}
+func (p *PullRequest) GetCreatedAt() githubv4.DateTime {
+	return p.CreatedAt
+}
+func (p *PullRequest) GetClosedAt() githubv4.DateTime {
+	return p.ClosedAt
+}
+func (p *PullRequest) GetComments() cmd.Comments {
+	return p.Comments
+}
 
 func init() {
 	cmd.RepoCmd.AddCommand(PullsCmd)

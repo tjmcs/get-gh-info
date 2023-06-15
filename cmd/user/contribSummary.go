@@ -67,8 +67,8 @@ func summaryOfContribs() map[string]interface{} {
 	}
 	// gitHubIdList := userIdList
 	for _, member := range teamList {
-		// gitHubIdList = append(gitHubIdList, member["gitHubId"])
-		mySet.Add(member["gitHubId"])
+		// gitHubIdList = append(gitHubIdList, member["githubid"])
+		mySet.Add(member["githubid"])
 	}
 	// initialize the vars map that we'll use when making our query for a summary of contributions
 	vars := map[string]interface{}{

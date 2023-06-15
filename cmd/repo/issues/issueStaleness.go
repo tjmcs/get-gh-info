@@ -112,7 +112,7 @@ func getStalenessStats() map[string]interface{} {
 			firstPage := true
 			// and a few other variables that we'll use to query the system for results
 			var err error
-			var edges issueSearchEdges
+			var edges repo.IssueSearchEdges
 			var pageInfo cmd.PageInfo
 			// loop over the pages of results from this query until we've reached the end
 			// of the list of issues that matched
@@ -120,9 +120,9 @@ func getStalenessStats() map[string]interface{} {
 				// run our query and add the data we want from the query results to the
 				// repositoryList map
 				if firstPage {
-					err = client.Query(context.Background(), &firstIssueSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.FirstIssueSearchQuery, vars)
 				} else {
-					err = client.Query(context.Background(), &issueSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.IssueSearchQuery, vars)
 				}
 				if err != nil {
 					// Handle error.
@@ -132,15 +132,15 @@ func getStalenessStats() map[string]interface{} {
 				// grab out the list of edges and the page info from the results of our search
 				// and loop over the edges
 				if firstPage {
-					edges = firstIssueSearchQuery.Search.Edges
-					pageInfo = firstIssueSearchQuery.Search.PageInfo
-					// set firstPage to false so that we'll use the issueSearchQuery struct
+					edges = repo.FirstIssueSearchQuery.Search.Edges
+					pageInfo = repo.FirstIssueSearchQuery.Search.PageInfo
+					// set firstPage to false so that we'll use the repo.IssueSearchQuery struct
 					// (and it's "after" value) for subsequent queries
 					firstPage = false
 					fmt.Fprintf(os.Stderr, ".")
 				} else {
-					edges = issueSearchQuery.Search.Edges
-					pageInfo = issueSearchQuery.Search.PageInfo
+					edges = repo.IssueSearchQuery.Search.Edges
+					pageInfo = repo.IssueSearchQuery.Search.PageInfo
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
@@ -168,65 +168,9 @@ func getStalenessStats() map[string]interface{} {
 							continue
 						}
 						// if we got this far, then the current repository is managed by the team we're interested in,
-						// so look for the time since we last had a response from a member of the team; first, initialize
-						// a variable to hold the difference between the end of our query window and the creation time for
-						// this issue
-						stalenessTime := endDateTime.Time.Sub(issueCreatedAt.Time)
-						// if no comments were found for this issue, then use the default staleness time
-						if len(issue.Comments.Nodes) == 0 {
-							stalenessTimeList = append(stalenessTimeList, stalenessTime)
-							continue
-						}
-						// loop over the comments for this issue, looking for the first comment from a team member
-						for _, comment := range issue.Comments.Nodes {
-							// if this comment was created after the reference time, then skip it
-							if comment.CreatedAt.After(endDateTime.Time) {
-								continue
-							}
-							// if the comment has an author (it should)
-							if len(comment.Author.Login) > 0 {
-								// if the flag to only count comments from the immediate team was
-								// set, then only count comments from immediate team members
-								if commentsFromTeamOnly {
-									// if here, looking only for comments only from immediate team members,
-									// so if this comment is not from an immediate team member skip it
-									idx := utils.FindIndexOf(comment.Author.Login, teamMemberIds)
-									if idx < 0 {
-										continue
-									}
-								} else {
-									// otherwise (by default), we're looking for comments from anyone who is
-									// an owner of this repository, a member of the organization that owns this
-									// repository, or collaborator on this repository; if that's not the case
-									// for this comment, then skip it
-									if comment.AuthorAssociation != "OWNER" &&
-										comment.AuthorAssociation != "MEMBER" &&
-										comment.AuthorAssociation != "COLLABORATOR" {
-										continue
-									}
-								}
-								// if the comment was created after the end of our query window, we can't count
-								// this comment as occuring before the end of our query window, so skip it
-								if comment.CreatedAt.After(endDateTime.Time) {
-									continue
-								}
-								// if get here, then we've found a comment from a member of the team,
-								// so use the time the comment was created to calculate a staleness
-								// value for this issue
-								if issue.Closed {
-									// if the issue is closed, then use the time the issue was closed
-									// to determine the staleness time
-									stalenessTime = issue.ClosedAt.Time.Sub(comment.CreatedAt.Time)
-								} else {
-									// otherwise use the reference time
-									stalenessTime = endDateTime.Sub(comment.CreatedAt.Time)
-								}
-								break
-							}
-						}
-						// and append this first response time to the list of first response times
+						// so get the time of the latest response for this issue and add it to the list
+						stalenessTime := repo.GetLatestResponseTime(&issue, endDateTime, commentsFromTeamOnly, teamMemberIds)
 						stalenessTimeList = append(stalenessTimeList, stalenessTime)
-						// if we found a comment from a member of the team, calculate the staleness time
 					}
 				}
 				// if we've reached the end of the list of contributions, break out of the loop
