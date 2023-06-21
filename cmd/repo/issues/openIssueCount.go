@@ -46,52 +46,6 @@ func init() {
 }
 
 /*
- * Define a few types that we can use to define (ane extract data from) the body of the GraphQL
- * query that will be used to retrieve the list of open issues in the named GitHub organization(s)
- */
-type issueSearchEdges []struct {
-	Cursor githubv4.String
-	Node   struct {
-		Issue struct {
-			CreatedAt         githubv4.DateTime
-			UpdatedAt         githubv4.DateTime
-			Closed            bool
-			ClosedAt          githubv4.DateTime
-			Title             string
-			Url               string
-			Author            cmd.Author
-			AuthorAssociation string
-			Repository        cmd.Repository
-			Assignees         cmd.Assignees `graphql:"assignees(first: 10)"`
-			Comments          cmd.Comments  `graphql:"comments(first: 100, orderBy: $orderCommentsBy)"`
-		} `graphql:"... on Issue"`
-	}
-}
-type issueSearchBody struct {
-	IssueCount githubv4.Int
-	Edges      issueSearchEdges
-	PageInfo   cmd.PageInfo
-}
-
-/*
- * define a pair of structs that can be used to query GitHub for a list of all of the
- * open PRs in a given organization (by name) that match a given query; the first is
- * used to query for the first page of results and the second is used to query for
- * subsequent pages of results
- */
-var firstIssueSearchQuery struct {
-	Search struct {
-		issueSearchBody
-	} `graphql:"search(first: $first, query: $query, type: $type)"`
-}
-
-var issueSearchQuery struct {
-	Search struct {
-		issueSearchBody
-	} `graphql:"search(first: $first, after: $after, query: $query, type: $type)"`
-}
-
-/*
  * define the function that is used to count the number of open issues in the
  * named GitHub organization(s); note that this function skips open issues that
  * include the 'backlog' label and only counts issues in repositories that are
@@ -147,7 +101,7 @@ func getOpenIssueCount() map[string]interface{} {
 			firstPage := true
 			// and a few other variables that we'll use to query the system for results
 			var err error
-			var edges issueSearchEdges
+			var edges repo.IssueSearchEdges
 			var pageInfo cmd.PageInfo
 			// loop over the pages of results until we've reached the end of the list of open
 			// issues for this organization
@@ -156,9 +110,9 @@ func getOpenIssueCount() map[string]interface{} {
 				// run our query and add the data we want from the query results to the
 				// repositoryList map
 				if firstPage {
-					err = client.Query(context.Background(), &firstIssueSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.FirstIssueSearchQuery, vars)
 				} else {
-					err = client.Query(context.Background(), &issueSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.IssueSearchQuery, vars)
 				}
 				if err != nil {
 					// Handle error.
@@ -168,15 +122,15 @@ func getOpenIssueCount() map[string]interface{} {
 				// grab out the list of edges and the page info from the results of our search
 				// and loop over the edges
 				if firstPage {
-					edges = firstIssueSearchQuery.Search.Edges
-					pageInfo = firstIssueSearchQuery.Search.PageInfo
-					// set firstPage to false so that we'll use the issueSearchQuery struct
+					edges = repo.FirstIssueSearchQuery.Search.Edges
+					pageInfo = repo.FirstIssueSearchQuery.Search.PageInfo
+					// set firstPage to false so that we'll use the repo.IssueSearchQuery struct
 					// (and it's "after" value) for subsequent queries
 					firstPage = false
 					fmt.Fprintf(os.Stderr, ".")
 				} else {
-					edges = issueSearchQuery.Search.Edges
-					pageInfo = issueSearchQuery.Search.PageInfo
+					edges = repo.IssueSearchQuery.Search.Edges
+					pageInfo = repo.IssueSearchQuery.Search.PageInfo
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {

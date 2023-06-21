@@ -44,8 +44,15 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-
+	listOpenPrsCmd.Flags().BoolVarP(&repo.RestrictToTeam, "restrict-to-team", "r", false, "only count comments from immediate team members")
+	listOpenPrsCmd.Flags().BoolVarP(&cmd.SortByTimeToFirstResponse, "by-first-response", "p", false, "sort by the time to first response")
+	listOpenPrsCmd.Flags().BoolVarP(&cmd.SortByStaleness, "by-staleness", "s", false, "sort by the time to last response (staleness)")
+	// mark the two "sort by" flags as mutually exclusive
+	listOpenPrsCmd.MarkFlagsMutuallyExclusive("by-first-response", "by-staleness")
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
+	viper.BindPFlag("restrictToTeam", listOpenPrsCmd.Flags().Lookup("restrict-to-team"))
+	viper.BindPFlag("byFirstReponse", listOpenPrsCmd.Flags().Lookup("by-first-response"))
+	viper.BindPFlag("byStaleness", listOpenPrsCmd.Flags().Lookup("by-staleness"))
 }
 
 /*
@@ -61,13 +68,31 @@ func listOpenPrCount() []map[string]interface{} {
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
-	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
-	// and initialize a slice that will be used to store the list of open PRs that we find
+	// set the order in which we want to retrieve the comments for issues based
+	// on the value 'byStaleness' flag (if we're going to sort by staleness, then
+	// we want to sort in the comments descending order by update time, otherwise
+	// we want to sort them in ascending order)
+	sortByFirstResponse := viper.GetBool("byFirstReponse")
+	sortByStaleness := viper.GetBool("byStaleness")
+	if sortByStaleness {
+		vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "DESC"}
+	} else {
+		vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
+	} // and initialize a slice that will be used to store the list of open PRs that we find
 	openPrList := []map[string]interface{}{}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
 	// should we filter out private repositories?
 	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
+	// should we only count comments from immediate team members?
+	commentsFromTeamOnly := viper.GetBool("restrictToTeam")
+	teamMemberIds := []string{}
+	if !commentsFromTeamOnly {
+		// and the details for members of the corresponding team
+		_, teamMemberMap := utils.GetTeamMembers(teamName)
+		// and from that map, construct list of member logins for that team
+		teamMemberIds = utils.GetTeamMemberIds(teamMemberMap)
+	}
 	// retrieve the reference time for our query window
 	startDateTime, endDateTime := utils.GetQueryTimeWindow()
 	// save date and datetime strings for use in output (below)
@@ -98,7 +123,7 @@ func listOpenPrCount() []map[string]interface{} {
 			firstPage := true
 			// and a few other variables that we'll use to query the system for results
 			var err error
-			var edges prSearchEdges
+			var edges repo.PrSearchEdges
 			var pageInfo cmd.PageInfo
 			// loop over the pages of results until we've reached the end of the list of open
 			// PRs for this organization
@@ -107,9 +132,9 @@ func listOpenPrCount() []map[string]interface{} {
 				// run our query and add the data we want from the query results to the
 				// repositoryList map
 				if firstPage {
-					err = client.Query(context.Background(), &firstPrSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.FirstPrSearchQuery, vars)
 				} else {
-					err = client.Query(context.Background(), &prSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.PrSearchQuery, vars)
 				}
 				if err != nil {
 					// Handle error.
@@ -119,15 +144,15 @@ func listOpenPrCount() []map[string]interface{} {
 				// grab out the list of edges and the page info from the results of our search
 				// and loop over the edges
 				if firstPage {
-					edges = firstPrSearchQuery.Search.Edges
-					pageInfo = firstPrSearchQuery.Search.PageInfo
-					// set firstPage to false so that we'll use the prSearchQuery struct
+					edges = repo.FirstPrSearchQuery.Search.Edges
+					pageInfo = repo.FirstPrSearchQuery.Search.PageInfo
+					// set firstPage to false so that we'll use the repo.PrSearchQuery struct
 					// (and it's "after" value) for subsequent queries
 					firstPage = false
 					fmt.Fprintf(os.Stderr, ".")
 				} else {
-					edges = prSearchQuery.Search.Edges
-					pageInfo = prSearchQuery.Search.PageInfo
+					edges = repo.PrSearchQuery.Search.Edges
+					pageInfo = repo.PrSearchQuery.Search.PageInfo
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
@@ -173,7 +198,8 @@ func listOpenPrCount() []map[string]interface{} {
 						} else {
 							prAge = endDateTime.Sub(pullRequest.CreatedAt.Time)
 						}
-						openPrList = append(openPrList, map[string]interface{}{
+						// create a map to hold the data for this issue
+						prData := map[string]interface{}{
 							"createdAt":       pullRequest.CreatedAt.Time,
 							"closed":          pullRequest.Closed,
 							"closedAt":        pullRequest.ClosedAt.Time,
@@ -185,7 +211,18 @@ func listOpenPrCount() []map[string]interface{} {
 							"email":           pullRequest.Author.User.Email,
 							"assignees":       strings.Join(assigneeList, ""),
 							"age":             utils.JsonDuration{Duration: prAge},
-						})
+						}
+						// finally, if a flag was set to sort the list of issues by the first response
+						// time or staleness time, add that field to our output map
+						if sortByFirstResponse {
+							firstResponseTime := repo.GetFirstResponseTime(&pullRequest, endDateTime, commentsFromTeamOnly, teamMemberIds)
+							prData["firstResponseTime"] = utils.JsonDuration{Duration: firstResponseTime}
+						} else if sortByStaleness {
+							stalenessTime := repo.GetLatestResponseTime(&pullRequest, endDateTime, commentsFromTeamOnly, teamMemberIds)
+							prData["staleness"] = utils.JsonDuration{Duration: stalenessTime}
+						}
+						// and add the issue to the list of open issues
+						openPrList = append(openPrList, prData)
 					}
 				}
 				// if we've reached the end of the list of contributions, break out of the loop
@@ -205,8 +242,18 @@ func listOpenPrCount() []map[string]interface{} {
 		teamName, startDateStr, endDateStr)
 	// If we have more than one open PR, then sort the list of open PRs by the age of each PR
 	if numOpenPrs > 1 {
+		var sortField string
+		// use the flag that was set to determine which field to sort by (either age, first response time, or staleness)
+		if sortByFirstResponse {
+			sortField = "firstResponseTime"
+		} else if sortByStaleness {
+			sortField = "staleness"
+		} else {
+			sortField = "age"
+		}
+		// and sort the list of open issues by that field
 		sort.Slice(openPrList, func(i, j int) bool {
-			return openPrList[i]["age"].(utils.JsonDuration).Duration > openPrList[j]["age"].(utils.JsonDuration).Duration
+			return openPrList[i][sortField].(utils.JsonDuration).Duration > openPrList[j][sortField].(utils.JsonDuration).Duration
 		})
 	}
 	// and return it

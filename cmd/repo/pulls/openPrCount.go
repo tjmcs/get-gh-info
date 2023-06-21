@@ -46,52 +46,6 @@ func init() {
 }
 
 /*
- * Define a few types that we can use to define (ane extract data from) the body of the GraphQL
- * query that will be used to retrieve the list of open PRs in the named GitHub organization(s)
- */
-type prSearchEdges []struct {
-	Cursor githubv4.String
-	Node   struct {
-		PullRequest struct {
-			CreatedAt         githubv4.DateTime
-			UpdatedAt         githubv4.DateTime
-			Closed            bool
-			ClosedAt          githubv4.DateTime
-			Title             string
-			Url               string
-			Author            cmd.Author
-			AuthorAssociation string
-			Repository        cmd.Repository
-			Assignees         cmd.Assignees `graphql:"assignees(first: 10)"`
-			Comments          cmd.Comments  `graphql:"comments(first: 100, orderBy: $orderCommentsBy)"`
-		} `graphql:"... on PullRequest"`
-	}
-}
-type prSearchBody struct {
-	IssueCount githubv4.Int
-	Edges      prSearchEdges
-	PageInfo   cmd.PageInfo
-}
-
-/*
- * define a pair of structs that can be used to query GitHub for a list of all of the
- * open PRs in a given organization (by name) that match a given query; the first is
- * used to query for the first page of results and the second is used to query for
- * subsequent pages of results
- */
-var firstPrSearchQuery struct {
-	Search struct {
-		prSearchBody
-	} `graphql:"search(first: $first, query: $query, type: $type)"`
-}
-
-var prSearchQuery struct {
-	Search struct {
-		prSearchBody
-	} `graphql:"search(first: $first, after: $after, query: $query, type: $type)"`
-}
-
-/*
  * define the function that is used to count the number of open PRs in the
  * named GitHub organization(s); note that this function skips open PRs that
  * include the 'backlog' label and only counts PRs in repositories that are
@@ -147,7 +101,7 @@ func getOpenPrCount() map[string]interface{} {
 			firstPage := true
 			// and a few other variables that we'll use to query the system for results
 			var err error
-			var edges prSearchEdges
+			var edges repo.PrSearchEdges
 			var pageInfo cmd.PageInfo
 			// loop over the pages of results until we've reached the end of the list of open
 			// PRs for this organization
@@ -156,9 +110,9 @@ func getOpenPrCount() map[string]interface{} {
 				// run our query and add the data we want from the query results to the
 				// repositoryList map
 				if firstPage {
-					err = client.Query(context.Background(), &firstPrSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.FirstPrSearchQuery, vars)
 				} else {
-					err = client.Query(context.Background(), &prSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.PrSearchQuery, vars)
 				}
 				if err != nil {
 					// Handle error.
@@ -168,15 +122,15 @@ func getOpenPrCount() map[string]interface{} {
 				// grab out the list of edges and the page info from the results of our search
 				// and loop over the edges
 				if firstPage {
-					edges = firstPrSearchQuery.Search.Edges
-					pageInfo = firstPrSearchQuery.Search.PageInfo
-					// set firstPage to false so that we'll use the prSearchQuery struct
+					edges = repo.FirstPrSearchQuery.Search.Edges
+					pageInfo = repo.FirstPrSearchQuery.Search.PageInfo
+					// set firstPage to false so that we'll use the repo.PrSearchQuery struct
 					// (and it's "after" value) for subsequent queries
 					firstPage = false
 					fmt.Fprintf(os.Stderr, ".")
 				} else {
-					edges = prSearchQuery.Search.Edges
-					pageInfo = prSearchQuery.Search.PageInfo
+					edges = repo.PrSearchQuery.Search.Edges
+					pageInfo = repo.PrSearchQuery.Search.PageInfo
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {

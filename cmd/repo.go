@@ -20,6 +20,12 @@ const (
 var (
 	// used locally to exclude private repositories from the output
 	excludePrivate bool
+	// used in some of the issues/pulls subcommands to track a flag indicating
+	// that the output should be sorted by the time to first response
+	SortByTimeToFirstResponse bool
+	// used in some of the issues/pulls subcommands to track a flag indicating
+	// that the output should be sorted by the time to last response (or staleness)
+	SortByStaleness bool
 	// and the repo command itself
 	RepoCmd = &cobra.Command{
 		Use:   "repo",
@@ -65,6 +71,20 @@ type Comments struct {
 		AuthorAssociation string
 		Body              string
 	}
+}
+
+type IssueOrPrBase struct {
+	CreatedAt         githubv4.DateTime
+	UpdatedAt         githubv4.DateTime
+	Closed            bool
+	ClosedAt          githubv4.DateTime
+	Title             string
+	Url               string
+	Author            Author
+	AuthorAssociation string
+	Repository        Repository
+	Assignees         Assignees `graphql:"assignees(first: 10)"`
+	Comments          Comments  `graphql:"comments(first: 100, orderBy: $orderCommentsBy)"`
 }
 
 type PageInfo struct {

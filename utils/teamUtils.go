@@ -18,7 +18,7 @@ import (
 func findUserInTeam(teamList []map[string]string, user string) (bool, string) {
 	for _, member := range teamList {
 		if member["user"] == user {
-			return true, member["gitHubId"]
+			return true, member["githubid"]
 		}
 	}
 	return false, ""
@@ -81,7 +81,7 @@ func GetUserIdList() []string {
 		// otherwise, get the list of user IDs from the team (as the default user list)
 		_, teamList := GetTeamMembers()
 		for _, member := range teamList {
-			userIdList = append(userIdList, member["gitHubId"])
+			userIdList = append(userIdList, member["githubid"])
 		}
 	}
 	// if neither flag was used or if an empty string was provided for either then it's an error
@@ -134,8 +134,8 @@ func GetTeamMembers(inputTeamName ...string) (string, []map[string]string) {
 		// construct the list of team members as a list of maps of strings to strings
 		for _, member := range teamMap.([]interface{}) {
 			memberStrMap := map[string]string{}
-			for key, val := range member.(map[interface{}]interface{}) {
-				memberStrMap[key.(string)] = val.(string)
+			for key, val := range member.(map[string]interface{}) {
+				memberStrMap[key] = val.(string)
 			}
 			teamList = append(teamList, memberStrMap)
 		}
@@ -149,7 +149,7 @@ func GetTeamMembers(inputTeamName ...string) (string, []map[string]string) {
 func GetTeamMemberIds(teamMembers []map[string]string) []string {
 	var memberLogins []string
 	for _, member := range teamMembers {
-		memberLogins = append(memberLogins, member["gitHubId"])
+		memberLogins = append(memberLogins, member["githubid"])
 	}
 	return memberLogins
 }

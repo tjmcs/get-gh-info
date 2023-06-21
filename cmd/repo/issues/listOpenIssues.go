@@ -44,8 +44,15 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-
+	listOpenIssuesCmd.Flags().BoolVarP(&repo.RestrictToTeam, "restrict-to-team", "r", false, "only count comments from immediate team members")
+	listOpenIssuesCmd.Flags().BoolVarP(&cmd.SortByTimeToFirstResponse, "by-first-response", "p", false, "sort by the time to first response")
+	listOpenIssuesCmd.Flags().BoolVarP(&cmd.SortByStaleness, "by-staleness", "s", false, "sort by the time to last response (staleness)")
+	// mark the two "sort by" flags as mutually exclusive
+	listOpenIssuesCmd.MarkFlagsMutuallyExclusive("by-first-response", "by-staleness")
 	// bind the flags defined above to viper (so that we can use viper to retrieve the values)
+	viper.BindPFlag("restrictToTeam", listOpenIssuesCmd.Flags().Lookup("restrict-to-team"))
+	viper.BindPFlag("byFirstReponse", listOpenIssuesCmd.Flags().Lookup("by-first-response"))
+	viper.BindPFlag("byStaleness", listOpenIssuesCmd.Flags().Lookup("by-staleness"))
 }
 
 /*
@@ -61,13 +68,32 @@ func listOpenIssueCount() []map[string]interface{} {
 	vars := map[string]interface{}{}
 	vars["first"] = githubv4.Int(100)
 	vars["type"] = githubv4.SearchTypeIssue
-	vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
+	// set the order in which we want to retrieve the comments for issues based
+	// on the value 'byStaleness' flag (if we're going to sort by staleness, then
+	// we want to sort in the comments descending order by update time, otherwise
+	// we want to sort them in ascending order)
+	sortByFirstResponse := viper.GetBool("byFirstReponse")
+	sortByStaleness := viper.GetBool("byStaleness")
+	if sortByStaleness {
+		vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "DESC"}
+	} else {
+		vars["orderCommentsBy"] = githubv4.IssueCommentOrder{Field: "UPDATED_AT", Direction: "ASC"}
+	}
 	// and initialize a map that will be used to the list of issues that we find
 	openIssueList := []map[string]interface{}{}
 	// next, retrieve the list of repositories that are managed by the team we're looking for
 	teamName, repositoryList := utils.GetTeamRepos()
 	// should we filter out private repositories?
 	excludePrivateRepos := viper.GetBool("excludePrivateRepos")
+	// should we only count comments from immediate team members?
+	commentsFromTeamOnly := viper.GetBool("restrictToTeam")
+	teamMemberIds := []string{}
+	if !commentsFromTeamOnly {
+		// and the details for members of the corresponding team
+		_, teamMemberMap := utils.GetTeamMembers(teamName)
+		// and from that map, construct list of member logins for that team
+		teamMemberIds = utils.GetTeamMemberIds(teamMemberMap)
+	}
 	// retrieve the reference time for our query window
 	startDateTime, endDateTime := utils.GetQueryTimeWindow()
 	// save date and datetime strings for use in output (below)
@@ -98,7 +124,7 @@ func listOpenIssueCount() []map[string]interface{} {
 			firstPage := true
 			// and a few other variables that we'll use to query the system for results
 			var err error
-			var edges issueSearchEdges
+			var edges repo.IssueSearchEdges
 			var pageInfo cmd.PageInfo
 			// loop over the pages of results until we've reached the end of the list of open
 			// issues for this organization
@@ -107,9 +133,9 @@ func listOpenIssueCount() []map[string]interface{} {
 				// run our query and add the data we want from the query results to the
 				// repositoryList map
 				if firstPage {
-					err = client.Query(context.Background(), &firstIssueSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.FirstIssueSearchQuery, vars)
 				} else {
-					err = client.Query(context.Background(), &issueSearchQuery, vars)
+					err = client.Query(context.Background(), &repo.IssueSearchQuery, vars)
 				}
 				if err != nil {
 					// Handle error.
@@ -119,15 +145,15 @@ func listOpenIssueCount() []map[string]interface{} {
 				// grab out the list of edges and the page info from the results of our search
 				// and loop over the edges
 				if firstPage {
-					edges = firstIssueSearchQuery.Search.Edges
-					pageInfo = firstIssueSearchQuery.Search.PageInfo
+					edges = repo.FirstIssueSearchQuery.Search.Edges
+					pageInfo = repo.FirstIssueSearchQuery.Search.PageInfo
 					// set firstPage to false so that we'll use the IssueSearchQuery struct
 					// (and it's "after" value) for subsequent queries
 					firstPage = false
 					fmt.Fprintf(os.Stderr, ".")
 				} else {
-					edges = issueSearchQuery.Search.Edges
-					pageInfo = issueSearchQuery.Search.PageInfo
+					edges = repo.IssueSearchQuery.Search.Edges
+					pageInfo = repo.IssueSearchQuery.Search.PageInfo
 					fmt.Fprintf(os.Stderr, ".")
 				}
 				for _, edge := range edges {
@@ -167,13 +193,14 @@ func listOpenIssueCount() []map[string]interface{} {
 						// determine the age of this issue (which will be the time from when the issue was
 						// created to either the time it was closed if it's closed or to the the end
 						// of our time window if it's still open
-						var prAge time.Duration
+						var age time.Duration
 						if issue.Closed {
-							prAge = issue.ClosedAt.Time.Sub(issue.CreatedAt.Time)
+							age = issue.ClosedAt.Time.Sub(issue.CreatedAt.Time)
 						} else {
-							prAge = endDateTime.Sub(issue.CreatedAt.Time)
+							age = endDateTime.Sub(issue.CreatedAt.Time)
 						}
-						openIssueList = append(openIssueList, map[string]interface{}{
+						// create a map to hold the data for this issue
+						issueData := map[string]interface{}{
 							"createdAt":       issue.CreatedAt.Time,
 							"closed":          issue.Closed,
 							"closedAt":        issue.ClosedAt.Time,
@@ -184,8 +211,19 @@ func listOpenIssueCount() []map[string]interface{} {
 							"company":         issue.Author.User.Company,
 							"email":           issue.Author.User.Email,
 							"assignees":       strings.Join(assigneeList, ""),
-							"age":             utils.JsonDuration{Duration: prAge},
-						})
+							"age":             utils.JsonDuration{Duration: age},
+						}
+						// finally, if a flag was set to sort the list of issues by the first response
+						// time or staleness time, add that field to our output map
+						if sortByFirstResponse {
+							firstResponseTime := repo.GetFirstResponseTime(&issue, endDateTime, commentsFromTeamOnly, teamMemberIds)
+							issueData["firstResponseTime"] = utils.JsonDuration{Duration: firstResponseTime}
+						} else if sortByStaleness {
+							stalenessTime := repo.GetLatestResponseTime(&issue, endDateTime, commentsFromTeamOnly, teamMemberIds)
+							issueData["staleness"] = utils.JsonDuration{Duration: stalenessTime}
+						}
+						// and add the issue to the list of open issues
+						openIssueList = append(openIssueList, issueData)
 					}
 				}
 				// if we've reached the end of the list of contributions, break out of the loop
@@ -205,8 +243,18 @@ func listOpenIssueCount() []map[string]interface{} {
 		teamName, startDateStr, endDateStr)
 	// If we have more than one open issue, then sort the list of open issues by the age of each issue
 	if numOpenIssues > 1 {
+		var sortField string
+		// use the flag that was set to determine which field to sort by (either age, first response time, or staleness)
+		if sortByFirstResponse {
+			sortField = "firstResponseTime"
+		} else if sortByStaleness {
+			sortField = "staleness"
+		} else {
+			sortField = "age"
+		}
+		// and sort the list of open issues by that field
 		sort.Slice(openIssueList, func(i, j int) bool {
-			return openIssueList[i]["age"].(utils.JsonDuration).Duration > openIssueList[j]["age"].(utils.JsonDuration).Duration
+			return openIssueList[i][sortField].(utils.JsonDuration).Duration > openIssueList[j][sortField].(utils.JsonDuration).Duration
 		})
 	}
 	// and return it
